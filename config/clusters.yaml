@@ -1,0 +1,52 @@
+# Market clusters (model-pooling axis - see docs/ARCHITECTURE.md "Two
+# orthogonal axes"). Cuts ACROSS the org/tenant hierarchy in config/tenants/:
+# a cluster groups properties that compete in similar markets regardless of
+# chain. Actual bandit backbone models are scoped per (cluster x tenant) -
+# see "Tenant isolation by default" - so two chains sharing a cluster still
+# get separate trained-weight backbones.
+#
+# For the POC these are domain-defined (region x market-tier). In
+# production this is upgraded to data-driven comp-set-graph clustering
+# (bandit_engine/training/clustering.py) using comp-set overlap + KPI
+# similarity; domain tiers remain the fallback prior for sparse-data cases.
+
+schema_version: 1
+
+clusters:
+  - id: nyc_midscale_urban
+    region: NYC
+    market_tier: midscale
+    description: "NYC midscale/upscale urban business hotels"
+    elasticity_spread: 1.0
+  - id: nyc_luxury_urban
+    region: NYC
+    market_tier: luxury
+    description: "NYC luxury urban hotels"
+    elasticity_spread: 1.3
+  - id: chicago_midscale_urban
+    region: Chicago
+    market_tier: midscale
+    description: "Chicago midscale/upscale urban business hotels"
+    elasticity_spread: 1.0
+  - id: miami_luxury_resort
+    region: Miami
+    market_tier: luxury
+    description: "Miami luxury resort hotels"
+    elasticity_spread: 1.3
+  - id: la_midscale_urban
+    region: LA
+    market_tier: midscale
+    description: "LA midscale/upscale urban business hotels"
+    elasticity_spread: 1.0
+  - id: la_luxury_urban
+    region: LA
+    market_tier: luxury
+    description: "LA luxury urban hotels"
+    elasticity_spread: 1.3
+
+# Cluster-size governance (see "Scale/maintainability at 10k+ properties"):
+# target range used when re-running data-driven clustering; below min ->
+# merge into nearest cluster; above max -> split.
+sizing:
+  target_min_properties_per_cluster: 3
+  target_max_properties_per_cluster: 500

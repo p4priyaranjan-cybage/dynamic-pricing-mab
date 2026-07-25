@@ -1,0 +1,34 @@
+# Core bandit engine
+vowpalwabbit==9.11.2
+
+# Web/serving
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+prometheus-client>=0.20
+prometheus-fastapi-instrumentator>=7.0
+
+# Dashboard
+streamlit>=1.38
+plotly>=5.22
+
+# Data / ML
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+xgboost>=2.0
+networkx>=3.3
+python-louvain>=0.16
+
+# Config / storage
+pyyaml>=6.0
+SQLAlchemy>=2.0
+
+# HTTP client (dashboard -> decision-api)
+httpx>=0.27
+
+# Utilities
+python-dateutil>=2.9
+
+# Tests
+pytest>=8.2

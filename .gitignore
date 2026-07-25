@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Local data / DB
+data/
+*.db
+*.sqlite3
+
+# Model artifacts
+model_registry/artifacts/
+
+# Env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

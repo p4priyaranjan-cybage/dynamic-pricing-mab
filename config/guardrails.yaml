@@ -1,0 +1,40 @@
+# Global default guardrails - config-driven rule registry. New constraints
+# are added HERE (or overridden per-tenant/property in config/tenants/) -
+# never as a code change. Every rule is applied as pre-decision ACTION
+# MASKING (filter invalid arms before the bandit picks) by
+# guardrails/constraints.py.
+#
+# Override resolution order: Property > Region > Brand > Chain > this file
+# (deep-merge, child wins on conflict) - see bandit_engine/config_loader.py.
+
+schema_version: 1
+
+rate_parity:
+  enabled: true
+  # Same published price must be used across all channels for a given cell.
+
+price_bounds:
+  min_offset_pct: -0.225   # cannot go below the ladder's deepest discount arm
+  max_offset_pct: 0.625    # cannot exceed the ladder's peak premium arm
+
+change_frequency:
+  max_changes_per_day: 2
+  # Applies at PUBLISH time, not at recommendation-compute time - the bandit
+  # can be re-scored freely (e.g. nightly + on-demand); this only throttles
+  # how often a new price is actually pushed to channels.
+
+competitive_positioning:
+  enabled: true
+  min_index_vs_compset: 0.75   # floor: never price below 75% of comp-set avg
+  max_index_vs_compset: 1.60   # ceiling: never price above 160% of comp-set avg
+
+approval:
+  auto_publish_delta_threshold_pct: 0.03
+  # Auto-publish if |price delta vs current published price| is below this
+  # threshold AND confidence is not low; otherwise require RM approval.
+  require_approval_if_confidence_below: 0.4
+  # Low-confidence recommendations always route to approval regardless of
+  # how small the price delta is (see bandit_engine/confidence.py).
+
+# Contractual / fixed rate plans are excluded from the bandit action space
+# entirely (see config/tenants/*.yaml `bandit_managed: false` per rate plan).

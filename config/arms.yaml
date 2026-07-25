@@ -1,0 +1,62 @@
+# Default arm ladder: discretized %-price-offsets applied on top of the
+# derived reference rate (see bandit_engine/reference_rate.py).
+#
+# Design rationale (see docs/ARCHITECTURE.md "Arm design"):
+#   - Fine-grained tiers near the center (0%) where most volume/data occurs.
+#   - Asymmetric tails: downside is bounded (cost floor / brand positioning /
+#     rate parity), upside has more room (accepted surge/compression pricing).
+#   - This grid is a DEFAULT. It can be overridden per cluster / tenant /
+#     room_type / rate_plan via the same `extends` override mechanism used
+#     for guardrails (see bandit_engine/config_loader.py).
+#
+# To extend this ladder, don't guess upfront - use the arm-selection
+# distribution monitored in production: saturation at an edge arm -> extend
+# that tail further; inconsistent flips between adjacent arms -> interpolate
+# a tier between them.
+
+schema_version: 1
+
+default_ladder:
+  - index: 0
+    label: "Deep Discount"
+    offset_pct: -0.225
+    typical_trigger: "Low season, far behind pace target"
+  - index: 1
+    label: "Discount"
+    offset_pct: -0.150
+    typical_trigger: "Weak demand, behind budget"
+  - index: 2
+    label: "Slight Discount"
+    offset_pct: -0.065
+    typical_trigger: "Moderate softness, fill inventory"
+  - index: 3
+    label: "Base Rate"
+    offset_pct: 0.0
+    typical_trigger: "Normal market conditions"
+  - index: 4
+    label: "Slight Premium"
+    offset_pct: 0.065
+    typical_trigger: "Moderate demand, slight comp advantage"
+  - index: 5
+    label: "Premium"
+    offset_pct: 0.150
+    typical_trigger: "Strong demand, weekend, conference"
+  - index: 6
+    label: "High Premium"
+    offset_pct: 0.275
+    typical_trigger: "High occupancy + high demand index"
+  - index: 7
+    label: "Demand Surge"
+    offset_pct: 0.450
+    typical_trigger: "Major event, high pickup, nearly sold-out"
+  - index: 8
+    label: "Peak Premium"
+    offset_pct: 0.625
+    typical_trigger: "Exceptional demand, all signals at max"
+
+# Per-cluster elasticity-spread scaling (multiplies offset_pct magnitudes).
+# 1.0 = use the default ladder unmodified. >1.0 widens the ladder (e.g. a
+# luxury / low-price-sensitivity cluster), <1.0 narrows it (e.g. a budget /
+# high-price-sensitivity cluster). Populated empirically once real data
+# flows in - left at 1.0 for all clusters in the POC.
+cluster_overrides: {}

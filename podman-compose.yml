@@ -1,0 +1,95 @@
+# Podman/Docker Compose - POC deployment (see docs/ARCHITECTURE.md for the
+# production/cloud-native mapping of these same three services).
+#
+# Run with Docker Compose:      docker compose -f podman-compose.yml up --build
+# Run with newer podman-compose (if/when this bug is fixed upstream):
+#                                podman-compose -f podman-compose.yml up --build
+#
+# KNOWN BROKEN with podman-compose 1.6.0 (the latest release on PyPI as of
+# writing - confirmed via `pip install --upgrade podman-compose`): it does
+# NOT honor a custom `dockerfile:` value AT ALL, regardless of whether the
+# path has a subdirectory in it or matches `context` exactly - it always
+# fails with "no Containerfile or Dockerfile specified or found in context
+# directory" unless the file is named exactly `Dockerfile` with no
+# `dockerfile:` override present. This was isolated by testing three
+# configurations (subdirectory dockerfile path, root-relative dockerfile
+# path, and finally a plain default-named `Dockerfile` with no override at
+# all - only the last one worked) and confirming a plain `podman build -f
+# Dockerfile.trainer -t x .` run by hand succeeds fine - i.e. the bug is
+# specific to podman-compose's own argument handling, not podman, the
+# Dockerfiles, or the build context. `podman compose` (space, Podman's
+# built-in front-end) just shells out to the same buggy podman-compose.exe,
+# so it fails identically. Given this, the RELIABLE path on Windows/Podman
+# today is the manual per-service build+run sequence documented in
+# README.md "9. Containerized run" - this compose file is kept for Docker
+# Compose users (unaffected by this bug) and in case a future
+# podman-compose release fixes it.
+#
+# NOTE (Windows/Podman): on Windows, run this from inside the Podman machine
+# context (`podman machine start` first) - bind-mounting the Windows
+# `data/` folder directly into a Linux Podman machine can have path/
+# permission quirks; using the named volume below (`pricing-data`) avoids
+# that entirely and is what this file uses.
+version: "3.9"
+
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.trainer
+    volumes:
+      - pricing-data:/app/data
+    command: ["python", "-m", "orchestration.pipelines.run_bootstrap"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      - bootstrap
+    volumes:
+      - pricing-data:/app/data
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    depends_on:
+      - api
+    environment:
+      - API_BASE_URL=http://api:8000
+    ports:
+      - "8501:8501"
+
+  # Scrapes GET /metrics/prometheus on the api service (see monitoring/prometheus.yml -
+  # its scrape target list already covers this compose network via "api:8000").
+  prometheus:
+    build:
+      context: .
+      dockerfile: Dockerfile.prometheus
+    depends_on:
+      - api
+    ports:
+      - "9090:9090"
+
+  # Auto-provisioned with the Prometheus datasource + the "Dynamic Pricing MAB -
+  # Overview" dashboard (monitoring/grafana/) - nothing to configure manually.
+  # Default login: admin/admin. NOTE: monitoring/grafana/provisioning/datasources/
+  # datasource.yml points at http://host.containers.internal:9090 (the manual
+  # `podman run` path's addressing) - change it to http://prometheus:9090 for
+  # this compose network before building, if using compose as your primary path.
+  grafana:
+    build:
+      context: .
+      dockerfile: Dockerfile.grafana
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+
+volumes:
+  pricing-data:

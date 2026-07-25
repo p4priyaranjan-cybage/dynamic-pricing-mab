@@ -1,0 +1,16 @@
+# Tells Grafana to auto-load any dashboard JSON files dropped in
+# monitoring/grafana/dashboards/ (baked into the image at
+# /var/lib/grafana/dashboards by Dockerfile.grafana) - no manual import
+# needed.
+apiVersion: 1
+
+providers:
+  - name: "Pricing MAB"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

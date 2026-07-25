@@ -1,0 +1,92 @@
+# Context feature schema consumed by the bandit engine.
+#
+# Every feature here becomes a VW context (namespace `c`) feature - NOT a
+# separate arm or a separate model. Room type / rate plan / LOS / segment /
+# property / comp-set signals all live here so a single (cluster x tenant)
+# backbone model + a property-level model can generalize across them instead
+# of needing one model per combination (see docs/ARCHITECTURE.md).
+
+schema_version: 1
+
+features:
+  # Demand / operational signals
+  - name: occupancy_pct
+    type: float
+    description: "Current on-the-books occupancy % for the stay date"
+  - name: adr_trend_pct
+    type: float
+    description: "ADR trend vs trailing baseline, %"
+  - name: pace_vs_stly_pct
+    type: float
+    description: "Booking pace vs same-time-last-year, %"
+  - name: pickup_last_7d
+    type: float
+    description: "Rooms picked up in the trailing 7 days for this stay date"
+  - name: remaining_inventory_pct
+    type: float
+    description: "Remaining sellable inventory %, for this room type"
+
+  # Comp-set signals
+  - name: comp_set_avg_rate
+    type: float
+    description: "Average rate across the comp set for this stay date"
+  - name: our_rate_vs_compset_index
+    type: float
+    description: "Our current rate / comp-set average rate"
+  - name: compset_rate_trend_pct
+    type: float
+    description: "7/14-day momentum of comp-set average rate, %"
+  - name: compset_rank
+    type: int
+    description: "Our rank among the comp set (1 = most expensive)"
+  - name: compset_dispersion
+    type: float
+    description: "Std-dev of comp-set rates / comp-set average rate"
+
+  # Local demand / events
+  - name: event_flag
+    type: bool
+    description: "Whether a local demand event is active for this stay date"
+  - name: event_intensity
+    type: float
+    description: "0-1 scaled intensity of the local event, 0 if none"
+
+  # Segment / room / rate / LOS context
+  - name: segment
+    type: categorical
+    values: ["transient", "corporate", "group", "leisure"]
+  - name: room_type
+    type: categorical
+    description: "Property-defined room type code, e.g. standard/deluxe/suite"
+  - name: rate_plan
+    type: categorical
+    description: "Property-defined rate plan code"
+  - name: los_bucket
+    type: categorical
+    values: ["1", "2", "3-5", "6-8", "9+"]
+
+  # Calendar / lead time
+  - name: day_of_week
+    type: categorical
+    values: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+  - name: lead_time_days
+    type: int
+    description: "Days between the decision date and the stay date"
+
+  # Identity (drives property-level specialization + cluster/tenant routing)
+  - name: property_id
+    type: categorical
+  - name: cluster_id
+    type: categorical
+  - name: tenant_id
+    type: categorical
+
+# Interaction terms explicitly added at training time (bandit_engine/policy.py)
+# so the model can learn e.g. "Suite tolerates a higher premium arm than
+# Standard" instead of averaging it away. See "Room-type & LOS granularity"
+# in docs/ARCHITECTURE.md.
+interactions:
+  - [room_type, arm]
+  - [los_bucket, arm]
+  - [segment, arm]
+  - [property_id, arm]

@@ -1,0 +1,37 @@
+# Hyatt tenant - see marriott.yaml for structure notes. Shares
+# nyc_midscale_urban and nyc_luxury_urban clusters with Marriott (properties
+# in the same local market) while remaining a SEPARATE trained-weight model
+# per cluster (tenant isolation - never pools raw data/weights with a
+# competing chain). See docs/ARCHITECTURE.md "Tenant isolation by default".
+
+schema_version: 1
+tenant_id: hyatt
+chain: Hyatt
+extends: _defaults
+
+brands:
+  - id: hyatt_place
+    market_tier: midscale
+    regions:
+      - region: NYC
+        cluster_id: nyc_midscale_urban
+        property_count: 2
+      - region: Chicago
+        cluster_id: chicago_midscale_urban
+        property_count: 1
+  - id: andaz
+    market_tier: luxury
+    regions:
+      - region: NYC
+        cluster_id: nyc_luxury_urban
+        property_count: 2
+      - region: LA
+        cluster_id: la_luxury_urban
+        property_count: 1
+
+# Override example: Hyatt wants a tighter competitive-positioning floor than
+# the platform default (0.75) - demonstrates the config extends/override
+# mechanism without touching code.
+guardrails:
+  competitive_positioning:
+    min_index_vs_compset: 0.80

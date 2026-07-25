@@ -1,0 +1,49 @@
+# Shared defaults inherited by every tenant via `extends: _defaults`.
+# Resolution order: Property > Region > Brand > Chain > this file
+# (deep-merge, child wins on conflict) - bandit_engine/config_loader.py.
+
+schema_version: 1
+
+room_types:
+  - code: standard
+    multiplier: 1.0
+  - code: deluxe
+    multiplier: 1.15
+  - code: suite
+    multiplier: 1.5
+
+rate_plans:
+  - code: bar_flexible
+    offset_multiplier: 1.0
+    bandit_managed: true
+  - code: advance_purchase_30
+    offset_multiplier: 0.88
+    bandit_managed: true
+  - code: corporate_negotiated
+    offset_multiplier: 0.80
+    bandit_managed: false   # contractual/fixed - excluded from the bandit action space entirely
+
+los_curve:
+  "1": 1.0
+  "2": 0.98
+  "3-5": 0.95
+  "6-8": 0.90
+  "9+": 0.85
+
+channels:
+  - direct
+  - ota_mock
+
+# Empty = inherit config/guardrails.yaml unmodified. Populate here (or in a
+# brand/region block) to override specific keys only.
+guardrails: {}
+
+ensemble:
+  # k in the credibility weight w_property = n_property / (n_property + k)
+  # used to blend the property's own model with its cluster/tenant backbone.
+  blend_smoothing_k: 20
+
+confidence_weights:
+  w_sample: 0.4
+  w_agreement: 0.35
+  w_margin: 0.25

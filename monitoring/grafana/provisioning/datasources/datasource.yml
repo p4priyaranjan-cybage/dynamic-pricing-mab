@@ -1,0 +1,17 @@
+# Auto-provisions the Prometheus datasource on Grafana startup - no manual
+# "Add data source" click needed. URL matches the manual `podman run` path
+# (Grafana container -> Prometheus container via the host's published port,
+# same mechanism the dashboard uses to reach the API - see
+# monitoring/prometheus.yml). If you instead run this stack via
+# `podman-compose`/`docker compose -f podman-compose.yml up`, change the
+# url below to `http://prometheus:9090` (compose's shared service network).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://host.containers.internal:9090
+    isDefault: true
+    editable: true
