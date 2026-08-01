@@ -38,9 +38,11 @@ from typing import Optional
 
 from vowpalwabbit import pyvw
 
+from model_registry.versioning import create_version_dir, get_current_version_dir, prune_old_versions
+
 MODEL_DIR = Path(__file__).resolve().parent.parent / "model_registry" / "artifacts"
 N_BAG_MEMBERS = 5
-_VW_ARGS = "--cb_explore_adf -q ca --quiet --random_seed {seed}"
+_VW_ARGS = "--cb_explore_adf -q ca --quiet --learning_rate 0.5 --random_seed {seed}"
 
 
 # --------------------------------------------------------------------------- #
@@ -138,41 +140,47 @@ class BackboneModel:
 
     def learn_batch(self, examples: list[dict]) -> None:
         """Batch retrain from reconciled (context, arms, chosen_pos, propensity,
-        reward) tuples. This is the ONLY way the backbone updates - called by
-        bandit_engine/training/train.py on a scheduled cadence, never from a
-        single live event, so it never reacts instantly to one property."""
-        for vw in self.members:
-            for rec in examples:
-                weight = _poisson1(self._rng)
-                if weight == 0:
-                    continue
-                shared_line = _context_line(rec["context"])
-                arms = rec["arms"]
-                chosen_pos = rec["chosen_pos"]
-                cost = -rec["reward"]
-                lines = []
-                for pos, arm in enumerate(arms):
-                    if pos == chosen_pos:
-                        lines.append(_arm_line(arm, f"{pos}:{cost}:{rec['propensity']}"))
-                    else:
-                        lines.append(_arm_line(arm))
-                ex = vw.parse([shared_line, *lines], labelType=pyvw.LabelType.CONTEXTUAL_BANDIT)
-                for _ in range(weight):
-                    vw.learn(ex)
-                vw.finish_example(ex)
+        reward) tuples. This is the ONLY way the backbone updates.
+
+        Training strategy: multiple passes over the data to strengthen the
+        context→arm signal. VW's online learning needs repeated exposure to
+        converge, especially with diverse contexts."""
+        N_PASSES = 3  # repeat training data to reinforce patterns
+        for _pass in range(N_PASSES):
+            for vw in self.members:
+                for rec in examples:
+                    weight = _poisson1(self._rng)
+                    if weight == 0:
+                        continue
+                    shared_line = _context_line(rec["context"])
+                    arms = rec["arms"]
+                    chosen_pos = rec["chosen_pos"]
+                    cost = -rec["reward"]
+                    lines = []
+                    for pos, arm in enumerate(arms):
+                        if pos == chosen_pos:
+                            lines.append(_arm_line(arm, f"{pos}:{cost}:{rec['propensity']}"))
+                        else:
+                            lines.append(_arm_line(arm))
+                    ex = vw.parse([shared_line, *lines], labelType=pyvw.LabelType.CONTEXTUAL_BANDIT)
+                    for _ in range(weight):
+                        vw.learn(ex)
+                    vw.finish_example(ex)
 
     def save(self) -> Path:
-        out_dir = MODEL_DIR / "backbone" / f"{self.tenant_id}__{self.cluster_id}"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = MODEL_DIR / "backbone" / f"{self.tenant_id}__{self.cluster_id}"
+        out_dir = create_version_dir(base_dir)
         for i, vw in enumerate(self.members):
             vw.save(str(out_dir / f"member_{i}.vw"))
+        prune_old_versions(base_dir)
         return out_dir
 
     @classmethod
     def load_or_create(cls, cluster_id: str, tenant_id: str) -> "BackboneModel":
         model = cls(cluster_id, tenant_id)
-        in_dir = MODEL_DIR / "backbone" / f"{tenant_id}__{cluster_id}"
-        if in_dir.exists():
+        base_dir = MODEL_DIR / "backbone" / f"{tenant_id}__{cluster_id}"
+        in_dir = get_current_version_dir(base_dir)
+        if in_dir is not None:
             for i in range(model.n_members):
                 f = in_dir / f"member_{i}.vw"
                 if f.exists():
@@ -231,22 +239,25 @@ class PropertyModel:
             self.n_observations += 1
 
     def save(self) -> Path:
-        out_dir = MODEL_DIR / "property" / self.property_id
-        out_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = MODEL_DIR / "property" / self.property_id
+        out_dir = create_version_dir(base_dir)
         self.vw.save(str(out_dir / "model.vw"))
         (out_dir / "n_observations.txt").write_text(str(self.n_observations))
+        prune_old_versions(base_dir)
         return out_dir
 
     @classmethod
     def load_or_create(cls, property_id: str) -> "PropertyModel":
         model = cls(property_id)
-        in_dir = MODEL_DIR / "property" / property_id
-        f = in_dir / "model.vw"
-        if f.exists():
-            model.vw = pyvw.Workspace(_VW_ARGS.format(seed=0) + f" -i {f}")
-            n_file = in_dir / "n_observations.txt"
-            if n_file.exists():
-                model.n_observations = int(n_file.read_text().strip() or 0)
+        base_dir = MODEL_DIR / "property" / property_id
+        in_dir = get_current_version_dir(base_dir)
+        if in_dir is not None:
+            f = in_dir / "model.vw"
+            if f.exists():
+                model.vw = pyvw.Workspace(_VW_ARGS.format(seed=0) + f" -i {f}")
+                n_file = in_dir / "n_observations.txt"
+                if n_file.exists():
+                    model.n_observations = int(n_file.read_text().strip() or 0)
         return model
 
 

@@ -93,3 +93,21 @@ def resolve_arm_ladder_for_cluster(cluster_id: str) -> list[dict]:
         for arm in ladder:
             arm["offset_pct"] = round(arm["offset_pct"] * spread, 4)
     return ladder
+
+
+def resolve_scoring_mode(tenant_id: str) -> str:
+    """Resolve the scoring mode for a tenant: 'bandit', 'baseline', or 'shadow'.
+
+    - 'bandit': normal MAB scoring (default)
+    - 'baseline': kill-switch/fallback - always return Base Rate arm
+    - 'shadow': score both bandit and baseline, log both, publish baseline only
+
+    Can be overridden per-tenant in config/tenants/*.yaml. This is the
+    one-click escape hatch for revenue managers - see docs/ARCHITECTURE.md
+    "Kill-Switch / Fallback Mode".
+    """
+    tenant_config = load_tenant_config(tenant_id)
+    mode = tenant_config.get("scoring_mode", "bandit")
+    if mode not in ("bandit", "baseline", "shadow"):
+        return "bandit"
+    return mode

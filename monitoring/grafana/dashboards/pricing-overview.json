@@ -1,125 +1,264 @@
 {
   "id": null,
   "uid": "pricing-mab-overview",
-  "title": "Dynamic Pricing MAB - Overview",
+  "title": "Dynamic Pricing MAB - Operations",
   "tags": ["pricing-mab"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": { "from": "now-3h", "to": "now" },
   "annotations": { "list": [] },
   "templating": { "list": [] },
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "Decision Volume & Arm Distribution",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
       "id": 1,
       "type": "timeseries",
-      "title": "Pricing decisions/min (by arm)",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "title": "Decisions/min by Arm",
+      "description": "Which pricing arms are being selected over time. A healthy system shows variation across arms; a collapsed one shows a single flat line.",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(pricing_decisions_total[5m])) by (arm_label) * 60",
-          "legendFormat": "{{arm_label}}"
-        }
+        { "refId": "A", "expr": "sum(rate(pricing_decisions_total[5m])) by (arm_label) * 60", "legendFormat": "{{arm_label}}" }
       ]
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "Pricing decisions/min (by status)",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "type": "piechart",
+      "title": "Arm Distribution (last 15m)",
+      "description": "Proportion of arms selected. Entropy below threshold triggers an alert for arm collapse.",
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(pricing_decisions_total[5m])) by (status) * 60",
-          "legendFormat": "{{status}}"
-        }
-      ]
+        { "refId": "A", "expr": "sum(increase(pricing_decisions_total[15m])) by (arm_label)", "legendFormat": "{{arm_label}}" }
+      ],
+      "options": { "legend": { "displayMode": "table", "placement": "right" } }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Average confidence score",
-      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 8 },
+      "title": "Total Decisions (24h)",
+      "gridPos": { "x": 18, "y": 1, "w": 3, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "blue" }] } } },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(pricing_confidence_score_sum[15m]) / rate(pricing_confidence_score_count[15m])"
-        }
+        { "refId": "A", "expr": "sum(increase(pricing_decisions_total[24h]))" }
       ]
     },
     {
       "id": 4,
-      "type": "timeseries",
-      "title": "Approval-queue actions/min",
-      "gridPos": { "x": 6, "y": 8, "w": 9, "h": 8 },
+      "type": "stat",
+      "title": "Live Decisions Rate",
+      "gridPos": { "x": 21, "y": 1, "w": 3, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }] } } },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(pricing_approval_actions_total[5m])) by (action) * 60",
-          "legendFormat": "{{action}}"
-        }
+        { "refId": "A", "expr": "sum(rate(pricing_decisions_total{kind=\"live\"}[5m])) * 60", "legendFormat": "decisions/min" }
       ]
     },
     {
       "id": 5,
-      "type": "timeseries",
-      "title": "Publisher calls/min (by channel)",
-      "gridPos": { "x": 15, "y": 8, "w": 9, "h": 8 },
+      "type": "bargauge",
+      "title": "Decisions by Tenant",
+      "gridPos": { "x": 18, "y": 4, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "short" } },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(pricing_publisher_calls_total[5m])) by (channel_ref) * 60",
-          "legendFormat": "{{channel_ref}}"
-        }
+        { "refId": "A", "expr": "sum(increase(pricing_decisions_by_tenant_total[1h])) by (tenant_id)", "legendFormat": "{{tenant_id}}" }
       ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Confidence & Model Quality",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 1 },
+      "collapsed": false
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "HTTP request rate (by handler)",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "title": "Confidence Score Distribution Over Time",
+      "description": "Heatmap of confidence scores. Low confidence clusters indicate model uncertainty.",
+      "gridPos": { "x": 0, "y": 9, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_requests_total[5m])) by (handler)",
-          "legendFormat": "{{handler}}"
-        }
+        { "refId": "A", "expr": "rate(pricing_confidence_score_sum[5m]) / rate(pricing_confidence_score_count[5m])", "legendFormat": "Mean confidence" },
+        { "refId": "B", "expr": "histogram_quantile(0.25, sum(rate(pricing_confidence_score_bucket[5m])) by (le))", "legendFormat": "p25" },
+        { "refId": "C", "expr": "histogram_quantile(0.75, sum(rate(pricing_confidence_score_bucket[5m])) by (le))", "legendFormat": "p75" }
       ]
     },
     {
       "id": 7,
-      "type": "timeseries",
-      "title": "HTTP p95 latency (by handler)",
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "type": "gauge",
+      "title": "Avg Confidence (now)",
+      "gridPos": { "x": 12, "y": 9, "w": 4, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 0.4, "color": "orange" }, { "value": 0.7, "color": "green" }] } } },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, handler))",
-          "legendFormat": "{{handler}}"
-        }
+        { "refId": "A", "expr": "rate(pricing_confidence_score_sum[15m]) / rate(pricing_confidence_score_count[15m])" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "histogram",
+      "title": "Price Offset Distribution",
+      "description": "Distribution of price offsets applied. Clustered at 0% = conservative; spread = adaptive.",
+      "gridPos": { "x": 16, "y": 9, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_arm_offset_pct_bucket[15m])) by (le)", "legendFormat": "{{le}}", "format": "heatmap" }
+      ]
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Approval Workflow",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Approval Actions/min",
+      "description": "Rate of approve/reject/override actions by revenue managers.",
+      "gridPos": { "x": 0, "y": 17, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 30 } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "approve" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+        { "matcher": { "id": "byName", "options": "reject" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+        { "matcher": { "id": "byName", "options": "override" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] }
+      ] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_approval_actions_total[5m])) by (action) * 60", "legendFormat": "{{action}}" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Override Rate (1h)",
+      "description": "Percentage of decisions overridden by RM. High rate = model disagreement with domain experts.",
+      "gridPos": { "x": 8, "y": 17, "w": 4, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.15, "color": "orange" }, { "value": 0.3, "color": "red" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_approval_actions_total{action=\"override\"}[1h])) / (sum(increase(pricing_approval_actions_total[1h])) > 0)" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Approval Required (reason)",
+      "gridPos": { "x": 8, "y": 20, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_approval_required_total[1h])) by (reason)", "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Publisher Calls by Channel",
+      "description": "Rate of price publications to distribution channels. Flat = no approvals happening.",
+      "gridPos": { "x": 12, "y": 17, "w": 6, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_publisher_calls_total[5m])) by (channel_ref) * 60", "legendFormat": "{{channel_ref}}" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Guardrail Exclusions/min",
+      "description": "Arms blocked by guardrail rules before reaching the model. Spikes indicate aggressive market moves being contained.",
+      "gridPos": { "x": 18, "y": 17, "w": 6, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_guardrail_exclusions_total[5m])) by (rule) * 60", "legendFormat": "{{rule}}" }
+      ]
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "API Performance & Infrastructure",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Scoring Latency (p50, p95, p99)",
+      "description": "Time to produce a single pricing recommendation. SLA: p95 < 500ms.",
+      "gridPos": { "x": 0, "y": 25, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 10 } } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum(rate(pricing_scoring_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum(rate(pricing_scoring_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum(rate(pricing_scoring_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by Endpoint",
+      "gridPos": { "x": 8, "y": 25, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(http_requests_total[5m])) by (handler)", "legendFormat": "{{handler}}" }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "HTTP p95 Latency by Endpoint",
+      "gridPos": { "x": 16, "y": 25, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.5, "color": "orange" }, { "value": 2.0, "color": "red" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, handler))", "legendFormat": "{{handler}}" }
+      ]
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "Cluster & Tenant Breakdown",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Decisions by Cluster",
+      "gridPos": { "x": 0, "y": 33, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "stacking": { "mode": "normal" } } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_decisions_by_cluster_total[5m])) by (cluster_id) * 60", "legendFormat": "{{cluster_id}}" }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Arm Selection by Cluster (top arms)",
+      "description": "Which arms each cluster favors. Divergence between clusters = healthy context-awareness.",
+      "gridPos": { "x": 12, "y": 33, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "topk(5, sum(increase(pricing_decisions_by_cluster_total[15m])) by (cluster_id, arm_label))", "legendFormat": "{{cluster_id}} / {{arm_label}}" }
       ]
     }
   ]

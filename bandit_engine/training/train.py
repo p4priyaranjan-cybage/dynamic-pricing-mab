@@ -28,8 +28,8 @@ from bandit_engine.training.offline_eval import (
 from db.models import Property
 from db.session import get_session
 
-BACKBONE_HISTORY_CAP = 3000  # historical rows sampled per (cluster,tenant) before x9-arm expansion
-PROPERTY_HISTORY_CAP = 600  # historical rows sampled per property before x9-arm expansion
+BACKBONE_HISTORY_CAP = 8000  # historical rows sampled per (cluster,tenant) before x9-arm expansion
+PROPERTY_HISTORY_CAP = 1500  # historical rows sampled per property before x9-arm expansion
 
 
 def bootstrap_backbones() -> tuple[list[dict], dict]:

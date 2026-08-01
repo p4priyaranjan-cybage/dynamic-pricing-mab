@@ -1,0 +1,54 @@
+Day	Scenario	Expected Model Behavior
+1	Low weekday demand (occ 42%, pace -8%)	Discount
+2	Corporate negotiated (not bandit-managed)	SKIP
+3	Conference day 1 (occ 88%, event 0.85)	Premium or higher
+4	Conference peak (occ 91%, nearly sold-out)	High Premium/Surge
+5	Post-event Friday (occ 68%, leisure shift)	Slight Premium
+6	Saturday peak (occ 78%, strong pace)	Premium
+7	Sunday drop-off (occ 52%, above comp)	Slight Discount
+8	Govt rate, group booking (normal demand)	Base Rate or Slight Discount
+9	Senior rate, quiet midweek (occ 38%)	Discount
+10	Special offer, good demand (occ 70%)	Base Rate or Slight Premium
+
+
+
+RATE_PLAN_ELASTICITY_MODIFIER = {
+    "bar_best_available": 1.0,      # baseline elasticity
+    "government_military": 0.7,     # less elastic (per-diem captive demand)
+    "senior": 0.85,                 # slightly less elastic (loyal, routine)
+    "special_offer": 1.15,          # more elastic (deal-seekers)
+    "corporate_negotiated": 0.4,    # very inelastic (contractual)
+}
+
+
+Before (weak):
+Context signals were independent random noise
+Comp-set prices didn't react to market conditions
+Segment was purely random regardless of rate plan
+All rate plans had the same demand elasticity
+After (realistic):
+Signal	Old behavior	New behavior
+Occupancy	Random around 55%	Seasonal (summer peak), tier-aware (luxury vs midscale), weekend boost
+Pace vs STLY	Random [-15, +15]	Correlated with occupancy (high occ → ahead of pace)
+Pickup	Random [0, 25]	Correlated with pace + event boost (realistic demand cascade)
+ADR trend	Random [-6, +6]	Correlated with demand strength (high occ → rising ADR)
+Comp-set rates	Independent random ±15% of our rate	Market-pressure-adjusted (events push ALL comp prices up)
+Comp-set trend	Random [-5, +5]	Correlated with our ADR trend (same market forces)
+Segment	Random by day of week	Rate-plan-aware (govt → group/transient, senior → leisure, etc.)
+Elasticity	Segment-only (corporate=0.55, leisure=1.25)	Segment × rate-plan (govt/military=0.7x modifier, special_offer=1.15x)
+
+
+
+python scripts/run_test_scenarios.py
+
+
+# Step 1: Clean everything
+Remove-Item data\pricing.db -Force
+Remove-Item -Recurse -Force model_registry\artifacts\backbone
+Remove-Item -Recurse -Force model_registry\artifacts\property
+
+# Step 2: Re-bootstrap (generates new data + trains with the fixed code)
+python -m orchestration.pipelines.run_bootstrap
+
+# Step 3: Re-test
+python scripts\run_test_scenarios.py

@@ -314,3 +314,59 @@ podman run --rm -p 3000:3000 pricing-grafana
   data-driven clustering upgrade, are designed and documented (see
   ARCHITECTURE.md) but not implemented in this POC's code - the domain
   tier clusters in `config/clusters.yaml` are used as-is.
+
+```Remove-Item data\pricing.db -Force
+python -m orchestration.pipelines.run_bootstrap
+
+uvicorn serving.api:app --host 0.0.0.0 --port 8000```
+
+
+```
+# 1. Load the property's OWN model (by property_id)
+prop_model = PropertyModel.load_or_create(req.property_id)
+
+# 2. Load the SHARED backbone (by cluster_id × tenant_id)
+backbone = BackboneModel.load_or_create(spec.cluster_id, spec.tenant_id)
+
+# 3. Create the ensemble that blends both
+policy = EnsemblePolicy(prop_model, backbone, blend_smoothing_k=20.0, ...)
+
+# 4. Score
+decision = policy.decide(context, allowed_arms)
+```
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    EnsemblePolicy.decide()                   │
+│                                                             │
+│   PropertyModel (1 per property)     BackboneModel          │
+│   ┌──────────────────────┐           (1 per cluster×tenant) │
+│   │ hyatt_andaz_nyc_01   │           ┌───────────────────┐  │
+│   │ (own VW workspace,   │           │ hyatt__nyc_luxury  │  │
+│   │  own weights,        │           │ (5 bagged VW       │  │
+│   │  own file)           │           │  workspaces,       │  │
+│   └──────────┬───────────┘           │  shared across all │  │
+│              │                        │  Hyatt NYC luxury  │  │
+│              │                        │  properties)       │  │
+│              │                        └──────────┬────────┘  │
+│              ▼                                   ▼            │
+│         property_probs                    backbone_probs     │
+│              │                                   │            │
+│              └──────────┐       ┌────────────────┘            │
+│                         ▼       ▼                             │
+│                    ┌─────────────────┐                        │
+│                    │   Blend by w    │                        │
+│                    │                 │                        │
+│                    │ w = n_obs /     │                        │
+│                    │    (n_obs + k)  │                        │
+│                    └────────┬────────┘                        │
+│                             ▼                                 │
+│                      blended PMF → pick arm                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+```# Build all images (workaround for podman-compose bug)
+.\scripts\build-images.ps1
+
+# Start everything
+podman-compose up```

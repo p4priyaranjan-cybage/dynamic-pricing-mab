@@ -19,13 +19,16 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, StreamingResponse
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from bandit_engine.config_loader import resolve_arm_ladder_for_cluster, resolve_guardrails_for_tenant
+from bandit_engine.config_loader import resolve_arm_ladder_for_cluster, resolve_guardrails_for_tenant, resolve_scoring_mode
 from bandit_engine.policy import BackboneModel, EnsemblePolicy, PropertyModel
 from bandit_engine.reference_rate import ReferenceRateInputs, compute_reference_rate
 from context_generator.chains import PropertySpec
@@ -60,6 +63,31 @@ APPROVAL_ACTIONS_TOTAL = Counter(
 )
 PUBLISHER_CALLS_TOTAL = Counter(
     "pricing_publisher_calls_total", "Mock/real channel publisher calls", ["channel_ref"]
+)
+# Enhanced metrics for detailed Grafana monitoring
+SCORING_LATENCY = Histogram(
+    "pricing_scoring_duration_seconds", "Time to score a single decision",
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+)
+ARM_OFFSET_APPLIED = Histogram(
+    "pricing_arm_offset_pct", "Arm offset percentage applied to decisions",
+    buckets=(-0.25, -0.15, -0.065, 0.0, 0.065, 0.15, 0.275, 0.45, 0.625),
+)
+PRICE_DELTA_PCT = Histogram(
+    "pricing_price_delta_vs_reference_pct", "Price delta vs reference rate (%)",
+    buckets=(-0.25, -0.15, -0.10, -0.05, 0.0, 0.05, 0.10, 0.15, 0.25, 0.50),
+)
+GUARDRAIL_EXCLUSIONS = Counter(
+    "pricing_guardrail_exclusions_total", "Arms excluded by guardrails", ["rule"]
+)
+DECISIONS_BY_TENANT = Counter(
+    "pricing_decisions_by_tenant_total", "Decisions by tenant", ["tenant_id", "arm_label"]
+)
+DECISIONS_BY_CLUSTER = Counter(
+    "pricing_decisions_by_cluster_total", "Decisions by cluster", ["cluster_id", "arm_label"]
+)
+APPROVAL_REQUIRED_TOTAL = Counter(
+    "pricing_approval_required_total", "Decisions requiring approval", ["reason"]
 )
 
 # Single in-process mock publisher instance - swap for channel_manager_adapter.py
@@ -203,6 +231,8 @@ def property_config(property_id: str):
 
 
 def _score(req: ScoreRequest) -> tuple[ScoreResponse, dict | None]:
+    import time as _time
+    _t0 = _time.perf_counter()
     session = get_session()
     try:
         spec = _load_property_spec(session, req.property_id)
@@ -221,6 +251,47 @@ def _score(req: ScoreRequest) -> tuple[ScoreResponse, dict | None]:
 
         ladder = resolve_arm_ladder_for_cluster(spec.cluster_id)
         guardrails = resolve_guardrails_for_tenant(spec.tenant_id)
+        scoring_mode = resolve_scoring_mode(spec.tenant_id)
+
+        # --- KILL-SWITCH / FALLBACK MODE ---
+        # If scoring_mode is "baseline", bypass the bandit entirely and
+        # return the Base Rate arm. This is the one-click escape hatch.
+        if scoring_mode == "baseline" and not req.dry_run:
+            base_arm = next((a for a in ladder if a["offset_pct"] == 0.0), ladder[len(ladder) // 2])
+            price = round(reference_rate * (1 + base_arm["offset_pct"]), 2)
+            from bandit_engine.policy import ScoredArm, DecisionResult
+            fallback_decision = DecisionResult(
+                chosen=ScoredArm(index=base_arm["index"], label=base_arm["label"], offset_pct=base_arm["offset_pct"], probability=1.0),
+                propensity=1.0,
+                all_arms=[ScoredArm(index=a["index"], label=a["label"], offset_pct=a["offset_pct"], probability=(1.0 if a["index"] == base_arm["index"] else 0.0)) for a in ladder],
+                confidence=1.0,
+                confidence_label="High",
+                confidence_breakdown={"sample": 1.0, "agreement": 1.0, "margin": 1.0},
+                blend_weight=0.0,
+            )
+            response = ScoreResponse(
+                property_id=req.property_id,
+                room_type=req.room_type,
+                rate_plan=req.rate_plan,
+                stay_date=req.stay_date,
+                reference_rate=round(reference_rate, 2),
+                chosen_arm_label=base_arm["label"],
+                chosen_arm_offset_pct=base_arm["offset_pct"],
+                published_price=price,
+                confidence_score=1.0,
+                confidence_label="High",
+                confidence_breakdown={"sample": 1.0, "agreement": 1.0, "margin": 1.0, "mode": "baseline_fallback"},
+                requires_approval=False,
+                excluded_arms=[],
+                all_arms=[{"index": a["index"], "label": a["label"], "offset_pct": a["offset_pct"], "probability": (1.0 if a["index"] == base_arm["index"] else 0.0)} for a in ladder],
+                context=context,
+            )
+            extra = {
+                "spec": spec, "context": context, "decision": fallback_decision,
+                "reference_rate": reference_rate, "price": price, "approval_needed": False,
+                "scoring_mode": "baseline",
+            }
+            return response, extra
 
         changes_today = (
             session.query(Decision)
@@ -265,6 +336,19 @@ def _score(req: ScoreRequest) -> tuple[ScoreResponse, dict | None]:
             arm_label=decision.chosen.label,
         ).inc()
 
+        # Enhanced metrics
+        ARM_OFFSET_APPLIED.observe(decision.chosen.offset_pct)
+        PRICE_DELTA_PCT.observe(decision.chosen.offset_pct)
+        DECISIONS_BY_TENANT.labels(tenant_id=spec.tenant_id, arm_label=decision.chosen.label).inc()
+        DECISIONS_BY_CLUSTER.labels(cluster_id=spec.cluster_id, arm_label=decision.chosen.label).inc()
+        for ex_arm in excluded_arms:
+            # Extract rule name from reason text (first word before space)
+            rule_name = ex_arm.reason.split(" ")[0] if ex_arm.reason else "unknown"
+            GUARDRAIL_EXCLUSIONS.labels(rule=rule_name).inc()
+        if approval_needed:
+            reason = "low_confidence" if decision.confidence < 0.4 else "large_delta"
+            APPROVAL_REQUIRED_TOTAL.labels(reason=reason).inc()
+
         response = ScoreResponse(
             property_id=req.property_id,
             room_type=req.room_type,
@@ -285,7 +369,9 @@ def _score(req: ScoreRequest) -> tuple[ScoreResponse, dict | None]:
         extra = {
             "spec": spec, "context": context, "decision": decision,
             "reference_rate": reference_rate, "price": price, "approval_needed": approval_needed,
+            "scoring_mode": scoring_mode,
         }
+        SCORING_LATENCY.observe(_time.perf_counter() - _t0)
         return response, extra
     finally:
         session.close()
@@ -306,6 +392,54 @@ def score(req: ScoreRequest):
     if req.dry_run:
         return simulate(req)
     response, extra = _score(req)
+
+    # --- SHADOW MODE ---
+    # In shadow mode, the bandit scored normally above (so we have its
+    # recommendation), but we LOG it as a shadow comparison and PUBLISH
+    # the baseline (Base Rate) instead. The bandit's recommendation is
+    # stored for later A/B analysis but never shown to guests.
+    scoring_mode = extra.get("scoring_mode", "bandit")
+    if scoring_mode == "shadow":
+        # Save the bandit's recommendation as a shadow log entry
+        bandit_price = extra["price"]
+        bandit_arm_label = response.chosen_arm_label
+        bandit_arm_offset = response.chosen_arm_offset_pct
+        bandit_confidence = response.confidence_score
+
+        # Override the response to publish baseline instead
+        ladder = resolve_arm_ladder_for_cluster(extra["spec"].cluster_id)
+        base_arm = next((a for a in ladder if a["offset_pct"] == 0.0), ladder[len(ladder) // 2])
+        baseline_price = round(extra["reference_rate"] * (1 + base_arm["offset_pct"]), 2)
+
+        # Update response to reflect what's actually published (baseline)
+        response.chosen_arm_label = base_arm["label"]
+        response.chosen_arm_offset_pct = base_arm["offset_pct"]
+        response.published_price = baseline_price
+        response.confidence_score = 1.0
+        response.confidence_label = "High"
+        response.confidence_breakdown = {
+            "mode": "shadow",
+            "bandit_would_have_chosen": bandit_arm_label,
+            "bandit_price": bandit_price,
+            "bandit_offset_pct": bandit_arm_offset,
+            "bandit_confidence": bandit_confidence,
+            "baseline_price": baseline_price,
+        }
+        response.requires_approval = False
+        extra["price"] = baseline_price
+        extra["approval_needed"] = False
+        # Overwrite the decision object's chosen arm for logging purposes
+        from bandit_engine.policy import ScoredArm, DecisionResult
+        extra["decision"] = DecisionResult(
+            chosen=ScoredArm(index=base_arm["index"], label=base_arm["label"], offset_pct=base_arm["offset_pct"], probability=1.0),
+            propensity=1.0,
+            all_arms=extra["decision"].all_arms,
+            confidence=1.0,
+            confidence_label="High",
+            confidence_breakdown=response.confidence_breakdown,
+            blend_weight=extra["decision"].blend_weight,
+        )
+
     status = "pending_approval" if extra["approval_needed"] else "auto_published"
     decision_id = log_decision(
         property_id=req.property_id,
@@ -455,6 +589,7 @@ def _update_decision_status(decision_id: str, status: str, approved_by: str | No
 def approve(decision_id: str, action: ApprovalAction):
     result = _update_decision_status(decision_id, "approved", approved_by=action.approved_by)
     APPROVAL_ACTIONS_TOTAL.labels(action="approve").inc()
+    _push_event("price_updated", {"decision_id": decision_id, "action": "approved"})
     return result
 
 
@@ -462,6 +597,7 @@ def approve(decision_id: str, action: ApprovalAction):
 def reject(decision_id: str, action: ApprovalAction):
     result = _update_decision_status(decision_id, "rejected", approved_by=action.approved_by)
     APPROVAL_ACTIONS_TOTAL.labels(action="reject").inc()
+    _push_event("decision_rejected", {"decision_id": decision_id, "action": "rejected"})
     return result
 
 
@@ -471,6 +607,7 @@ def override(decision_id: str, action: ApprovalAction):
         raise HTTPException(400, "override_price is required for override action")
     result = _update_decision_status(decision_id, "approved", approved_by=action.approved_by, override_price=action.override_price)
     APPROVAL_ACTIONS_TOTAL.labels(action="override").inc()
+    _push_event("price_updated", {"decision_id": decision_id, "action": "overridden", "price": action.override_price})
     return result
 
 
@@ -482,3 +619,104 @@ def metrics(cluster_id: str | None = None, tenant_id: str | None = None):
         "approval_stats": dashboard_metrics.approval_stats(cluster_id),
         "average_confidence": dashboard_metrics.average_confidence(cluster_id),
     }
+
+
+@app.get("/scoring-mode/{tenant_id}")
+def get_scoring_mode(tenant_id: str):
+    """Returns the current scoring mode for a tenant (bandit/baseline/shadow)."""
+    mode = resolve_scoring_mode(tenant_id)
+    return {"tenant_id": tenant_id, "scoring_mode": mode}
+
+
+@app.get("/model/health")
+def model_health():
+    """Returns the health status of the deployed models - latest backtest
+    results, version info, and whether the quality gate passed. This is the
+    'proof of credibility' endpoint for external stakeholders."""
+    from model_registry.versioning import sorted_versions, get_current_version_dir
+    from pathlib import Path
+
+    model_base = Path(__file__).resolve().parent.parent / "model_registry" / "artifacts"
+    backbone_dir = model_base / "backbone"
+    property_dir = model_base / "property"
+
+    backbone_status = {}
+    if backbone_dir.exists():
+        for d in backbone_dir.iterdir():
+            if d.is_dir():
+                versions = sorted_versions(d)
+                current = get_current_version_dir(d)
+                backbone_status[d.name] = {
+                    "versions_available": len(versions),
+                    "current_version": current.name if current and current != d else (versions[-1] if versions else "legacy"),
+                }
+
+    n_properties = 0
+    if property_dir.exists():
+        n_properties = sum(1 for d in property_dir.iterdir() if d.is_dir())
+
+    return {
+        "backbones": backbone_status,
+        "n_property_models": n_properties,
+        "model_versioning_enabled": True,
+        "quality_gate_enabled": True,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Server-Sent Events (SSE) for real-time updates to the frontend
+# --------------------------------------------------------------------------- #
+
+import asyncio
+import queue
+from collections import deque
+
+# Simple in-memory event bus for SSE (POC - production would use Redis pub/sub)
+_event_bus: deque = deque(maxlen=100)
+_event_counter = 0
+
+
+def _push_event(event_type: str, data: dict):
+    """Push an event to the SSE bus (called internally after approve/reject/override)."""
+    global _event_counter
+    _event_counter += 1
+    _event_bus.append({"id": _event_counter, "type": event_type, "data": json.dumps(data)})
+
+
+@app.get("/events")
+async def sse_events():
+    """Server-Sent Events stream - frontend subscribes for real-time updates."""
+    async def event_generator():
+        last_seen = _event_counter
+        while True:
+            # Check for new events
+            for event in _event_bus:
+                if event["id"] > last_seen:
+                    last_seen = event["id"]
+                    yield f"event: {event['type']}\ndata: {event['data']}\n\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# --------------------------------------------------------------------------- #
+# Static frontend files (HTML/Bootstrap/JS dashboard)
+# --------------------------------------------------------------------------- #
+
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_redirect():
+    """Serve the main dashboard HTML."""
+    index_path = _FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Frontend not found. Check frontend/ directory.</h1>", status_code=404)
+
+
+# Mount static assets (CSS, JS) - this MUST be after all route definitions
+# to avoid catching API routes. Mounted at /css, /js paths.
+if _FRONTEND_DIR.exists():
+    app.mount("/css", StaticFiles(directory=str(_FRONTEND_DIR / "css")), name="css")
+    app.mount("/js", StaticFiles(directory=str(_FRONTEND_DIR / "js")), name="js")

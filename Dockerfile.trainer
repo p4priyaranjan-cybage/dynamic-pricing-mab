@@ -3,5 +3,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
+# Ensure the data directory exists (the bootstrap pipeline creates pricing.db here)
+RUN mkdir -p /app/data
 ENV DATABASE_URL=sqlite:////app/data/pricing.db
 CMD ["python", "-m", "orchestration.pipelines.run_bootstrap"]

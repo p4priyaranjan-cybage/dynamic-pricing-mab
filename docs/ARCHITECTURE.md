@@ -464,3 +464,152 @@ Key properties of this flow, each independently important for correctness:
   influence on `PropertyModel`/`BackboneModel` weights) only happens once
   the stay date has passed **and** `orchestration.pipelines.run_nightly`
   is explicitly run. There is no live/synchronous retraining path.
+
+## 13. Model Versioning & Rollback
+
+Model artifacts are now versioned with timestamps. Every `save()` call
+(from `BackboneModel` or `PropertyModel`) creates a new version directory
+rather than overwriting in place:
+
+```
+model_registry/artifacts/backbone/hyatt__nyc_luxury_urban/
+    v_20260725_030000/    <-- timestamped version
+        member_0.vw ... member_4.vw
+    v_20260724_030000/    <-- previous version
+    current.txt           <-- contains "v_20260725_030000"
+```
+
+- `current.txt` points to the active version; `load_or_create` always reads
+  this pointer to find the right directory.
+- **Rollback** = overwrite `current.txt` with a previous version tag.
+  Implemented in `model_registry/versioning.py` (used by the quality gate
+  in `run_nightly.py` when a retrain fails validation).
+- **Pruning**: only the last 5 versions are kept; older ones are deleted
+  automatically after each save.
+- **Backward-compatible**: if no `current.txt` exists (legacy flat layout
+  with `.vw` files directly in the base directory), the loader falls back
+  to that layout transparently.
+
+## 14. Quality Gate (automated model-promotion control)
+
+The nightly pipeline (`orchestration/pipelines/run_nightly.py`) now
+includes a mandatory quality gate:
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│ 1. Reconcile    │────▶│ 2. Retrain       │────▶│ 3. Quality Gate     │
+│    rewards      │     │    (new version) │     │    (backtest suite) │
+└─────────────────┘     └──────────────────┘     └────────┬────────────┘
+                                                          │
+                                              ┌───────────┴───────────┐
+                                              │                       │
+                                        ┌─────▼──────┐        ┌──────▼──────┐
+                                        │ CI > 0?    │        │ CI ≤ 0?     │
+                                        │ PROMOTE    │        │ ROLLBACK    │
+                                        │ (keep new) │        │ + ALERT     │
+                                        └────────────┘        └─────────────┘
+```
+
+- After retraining, `run_backtest_suite` is run on a sample of 6 properties.
+- If `reliably_beats_baseline` is True (bootstrap CI entirely above zero):
+  the new model stays as `current` (already promoted by versioning).
+- If False: ALL backbone and property models are rolled back to their
+  previous version, and a warning is logged. The system continues serving
+  the prior (known-better) model.
+- The gate is configurable: `QUALITY_GATE_ENABLED = True/False`,
+  `BACKTEST_SAMPLE_SIZE`, `BACKTEST_N_ROUNDS`.
+
+## 15. Kill-Switch / Fallback Mode
+
+A config-driven scoring mode (`config/tenants/_defaults.yaml` or per-tenant
+override) controls whether the bandit is active:
+
+| Mode | Behavior | When to use |
+|---|---|---|
+| `bandit` | Normal MAB scoring (default) | Production, bandit validated |
+| `baseline` | Bypass bandit, always return Base Rate (0% offset) | Emergency kill-switch, model degradation detected |
+| `shadow` | Score bandit normally, but publish baseline; log both for comparison | Pre-production A/B validation |
+
+Configured via `scoring_mode:` in tenant YAML. The API resolves this via
+`bandit_engine/config_loader.resolve_scoring_mode(tenant_id)` and acts
+accordingly in `serving/api.py _score()`.
+
+API endpoint: `GET /scoring-mode/{tenant_id}` returns the current mode.
+
+## 16. Shadow Mode (live A/B validation)
+
+When `scoring_mode: shadow`:
+
+1. The bandit scores the context normally (full ensemble, guardrails, etc.)
+2. The bandit's recommendation (arm, price, confidence) is preserved in
+   `confidence_breakdown` for later analysis
+3. The **published response** is overridden to the baseline (Base Rate arm)
+4. The decision is logged with the baseline price (what the guest actually sees)
+5. Revenue managers can later compare "what the bandit would have done" vs.
+   "what was actually published" using real booking outcomes
+
+This enables zero-risk live validation: the bandit never touches guests,
+but you accumulate real evidence of whether its recommendations would have
+been better. After 2-4 weeks of shadow data, switch to `scoring_mode: bandit`
+if the evidence is positive.
+
+## 17. Reward Model Improvements (context-dependent elasticity)
+
+The offline reward model (`bandit_engine/training/offline_eval.py`) now
+includes:
+
+1. **Context-offset interaction features**: `occupancy_pct * offset_pct`,
+   `event_intensity * offset_pct`, `pace_vs_stly_pct * offset_pct`,
+   `pickup_last_7d * offset_pct`, and `segment_elasticity * offset_pct`.
+   These help the XGBoost model learn "high occupancy makes premium arms
+   more viable" without needing to discover these splits from sparse data.
+
+2. **Context-conditioned premium elasticity floor**: instead of a single
+   global `PREMIUM_ELASTICITY_FLOOR = -2.0` for all segments, the floor
+   now varies by guest segment:
+   - Corporate: -1.3 (least elastic, tolerates higher prices)
+   - Group: -1.6
+   - Transient: -2.0 (the old global default)
+   - Leisure: -2.6 (most elastic, penalizes premiums more)
+
+3. **Higher history caps**: `BACKBONE_HISTORY_CAP` raised from 3000 to 8000,
+   `PROPERTY_HISTORY_CAP` from 600 to 1500 — gives the reward model and
+   VW more signal to work with.
+
+## 18. Model Health Endpoint
+
+`GET /model/health` returns:
+- Per-backbone version info (how many versions exist, which is current)
+- Number of property models deployed
+- Whether model versioning and quality gate are enabled
+
+This serves as the "proof of credibility" endpoint for external stakeholders
+and dashboards.
+
+## 19. Deployment (podman-compose)
+
+The full stack runs via `podman-compose up` (or `docker compose up`):
+
+```
+┌──────────────┐   ┌──────────┐   ┌─────────────┐   ┌────────────┐   ┌─────────┐
+│  bootstrap   │──▶│   api    │──▶│  dashboard  │   │ prometheus │──▶│ grafana │
+│ (runs once,  │   │ :8000    │   │   :8501     │   │   :9090    │   │  :3000  │
+│  generates   │   │          │   │             │   │            │   │         │
+│  data+models)│   │          │   │             │   │            │   │         │
+└──────────────┘   └──────────┘   └─────────────┘   └────────────┘   └─────────┘
+       │                │                │
+       └────────┬───────┘                │
+          pricing-data              (scrapes api)
+          volume (SQLite)
+```
+
+**Podman on Windows workaround**: `podman-compose` has a known bug where it
+doesn't honor the `dockerfile:` field. The fix:
+1. Run `.\scripts\build-images.ps1` first (pre-builds all images with
+   explicit `-f` flags, which podman handles correctly)
+2. Then `podman-compose up` finds images by `image: localhost/...` name
+
+**Local development** (no containers):
+1. `.\scripts\bootstrap-local.ps1` — generates data + trains models
+2. `uvicorn serving.api:app --host 0.0.0.0 --port 8000`
+3. `python -m streamlit run dashboard/app.py`

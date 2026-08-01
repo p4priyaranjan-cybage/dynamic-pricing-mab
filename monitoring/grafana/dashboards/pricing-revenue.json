@@ -1,0 +1,160 @@
+{
+  "id": null,
+  "uid": "pricing-mab-revenue",
+  "title": "Dynamic Pricing MAB - Revenue Intelligence",
+  "tags": ["pricing-mab", "revenue"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "annotations": { "list": [] },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Revenue Impact Summary",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Decisions Today",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "blue" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_decisions_total{kind=\"live\"}[24h]))" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Approvals Today",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_approval_actions_total{action=\"approve\"}[24h]))" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Overrides Today",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 5, "color": "orange" }, { "value": 15, "color": "red" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_approval_actions_total{action=\"override\"}[24h]))" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Rejections Today",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 3, "color": "orange" }, { "value": 10, "color": "red" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_approval_actions_total{action=\"reject\"}[24h]))" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Prices Published",
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "purple" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(pricing_publisher_calls_total[24h]))" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "gauge",
+      "title": "Model Confidence",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 0.4, "color": "orange" }, { "value": 0.7, "color": "green" }] } } },
+      "targets": [
+        { "refId": "A", "expr": "rate(pricing_confidence_score_sum[15m]) / rate(pricing_confidence_score_count[15m])" }
+      ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Pricing Strategy Analysis",
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Price Offset Trend (Premium vs Discount vs Base)",
+      "description": "Shows whether the system is trending toward discounting or premium pricing over time.",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 25, "stacking": { "mode": "percent" } } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*Discount.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": ".*Base.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "gray", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": ".*Premium.*|.*Surge.*|.*Peak.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_decisions_total{kind=\"live\"}[10m])) by (arm_label) * 60", "legendFormat": "{{arm_label}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Decisions by Status Over Time",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 20 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "auto_published" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "requires_approval" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_decisions_total{kind=\"live\"}[5m])) by (status) * 60", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "RM Engagement & Trust Indicators",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Override Rate Over Time (rolling 1h)",
+      "description": "Dropping override rate = RMs trusting the model more. Rising = model drift or disagreement.",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.2, "color": "orange" }, { "value": 0.4, "color": "red" }] }, "custom": { "thresholdsStyle": { "mode": "line" } } } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_approval_actions_total{action=\"override\"}[1h])) / (sum(rate(pricing_approval_actions_total[1h])) > 0)", "legendFormat": "Override %" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Approval Reasons Trend",
+      "description": "Why decisions need approval: low confidence vs large price delta.",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pricing_approval_required_total[5m])) by (reason) * 60", "legendFormat": "{{reason}}" }
+      ]
+    }
+  ]
+}

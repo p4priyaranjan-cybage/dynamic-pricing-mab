@@ -18,6 +18,17 @@ SEGMENT_ELASTICITY = {
     "group": 0.80,
 }
 
+# Rate-plan-specific elasticity modifier: government/senior guests booking
+# on discounted plans are less price-sensitive to further discounting (already
+# getting a deal) but more sensitive to premiums (will switch to another hotel).
+RATE_PLAN_ELASTICITY_MODIFIER = {
+    "bar_best_available": 1.0,
+    "government_military": 0.7,   # less elastic overall (captive demand, per-diem budget)
+    "senior": 0.85,               # slightly less elastic (loyalty, routine)
+    "special_offer": 1.15,        # more elastic (deal-seekers compare aggressively)
+    "corporate_negotiated": 0.4,  # very inelastic (contractual, not price-shopping)
+}
+
 BASE_LOGIT = -0.55
 
 
@@ -25,7 +36,7 @@ def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
-def booking_probability(context: dict, offset_pct: float) -> float:
+def booking_probability(context: dict, offset_pct: float, rate_plan: str = "bar_best_available") -> float:
     demand = 0.0
     demand += 0.022 * (context["occupancy_pct"] - 60.0)
     demand += 0.014 * context["pace_vs_stly_pct"]
@@ -34,7 +45,11 @@ def booking_probability(context: dict, offset_pct: float) -> float:
     demand -= 0.6 * max(0.0, context["our_rate_vs_compset_index"] - 1.0)
     demand += 0.01 * context["pickup_last_7d"]
 
-    elasticity = 2.4 * SEGMENT_ELASTICITY.get(context["segment"], 1.0)
+    # Elasticity is segment × rate-plan specific
+    segment_elast = SEGMENT_ELASTICITY.get(context["segment"], 1.0)
+    plan_modifier = RATE_PLAN_ELASTICITY_MODIFIER.get(rate_plan, 1.0)
+    elasticity = 2.4 * segment_elast * plan_modifier
+
     logit = BASE_LOGIT + demand - elasticity * offset_pct
     return _sigmoid(logit)
 
@@ -49,7 +64,7 @@ def cancellation_probability(context: dict, rate_plan: str) -> float:
 
 
 def simulate_outcome(context: dict, offset_pct: float, rate_plan: str, rng: random.Random) -> dict:
-    p_book = booking_probability(context, offset_pct)
+    p_book = booking_probability(context, offset_pct, rate_plan)
     booked = rng.random() < p_book
     cancelled = False
     if booked:

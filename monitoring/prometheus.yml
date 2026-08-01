@@ -1,18 +1,6 @@
 # Prometheus scrape config for the Dynamic Pricing MAB serving API.
-#
-# Two targets are listed for the SAME job so this one config works no
-# matter which of the two paths in README.md "9. Containerized run" is
-# used:
-#   - manual `podman run` sequence (the reliable path today - see the
-#     podman-compose.yml header comment for why): containers are NOT on a
-#     shared network, so the API is only reachable from another container
-#     via `host.containers.internal` + its published host port - the same
-#     mechanism the dashboard container already uses to reach the API.
-#   - `podman-compose`/`docker compose -f podman-compose.yml up`: services
-#     share a compose-managed network and resolve each other by service
-#     name instead, e.g. `api:8000`.
-# Whichever path isn't in use simply shows up as a "down" target on
-# Prometheus's Status > Targets page - harmless for this POC.
+# Targets both compose-network and manual-run addressing (whichever isn't
+# active just shows "down" on the Targets page - harmless).
 global:
   scrape_interval: 15s
 
@@ -20,4 +8,4 @@ scrape_configs:
   - job_name: pricing-api
     metrics_path: /metrics/prometheus
     static_configs:
-      - targets: ["host.containers.internal:8000", "api:8000"]
+      - targets: ["api:8000", "host.containers.internal:8000"]

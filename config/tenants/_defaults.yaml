@@ -13,15 +13,26 @@ room_types:
     multiplier: 1.5
 
 rate_plans:
-  - code: bar_flexible
+  - code: bar_best_available
     offset_multiplier: 1.0
     bandit_managed: true
-  - code: advance_purchase_30
-    offset_multiplier: 0.88
+    description: "Best Available Rate - fully dynamic, primary bandit-managed plan"
+  - code: government_military
+    offset_multiplier: 0.75
     bandit_managed: true
+    description: "Government/Military rate - discounted, eligible for dynamic offset"
+  - code: senior
+    offset_multiplier: 0.85
+    bandit_managed: true
+    description: "Senior rate - moderate discount, eligible for dynamic offset"
+  - code: special_offer
+    offset_multiplier: 0.90
+    bandit_managed: true
+    description: "Special Offer/Promo code - slight discount, bandit adjusts timing"
   - code: corporate_negotiated
     offset_multiplier: 0.80
-    bandit_managed: false   # contractual/fixed - excluded from the bandit action space entirely
+    bandit_managed: false
+    description: "Corporate negotiated - contractual/fixed, excluded from bandit entirely"
 
 los_curve:
   "1": 1.0
@@ -47,3 +58,11 @@ confidence_weights:
   w_sample: 0.4
   w_agreement: 0.35
   w_margin: 0.25
+
+# Kill-switch / fallback mode: when enabled, the bandit is bypassed and the
+# API always returns the Base Rate arm (index 3, 0% offset). This gives
+# revenue managers a one-click escape hatch if the model starts producing
+# poor recommendations. Can be overridden per-tenant or per-property.
+# Modes: "bandit" (normal), "baseline" (always Base Rate), "shadow" (score
+# both but publish baseline only - see serving/api.py shadow mode).
+scoring_mode: bandit
