@@ -26,12 +26,12 @@ written so it doesn't depend on any prior conversation history.
 | `context_generator/` | Synthetic fleet + historical data generator (ground-truth demand simulator included) |
 | `feedback/` | Decision logging + delayed reward reconciliation |
 | `publisher/` | Channel-publish abstraction (mock for POC, adapter stub for production) |
-| `serving/` | FastAPI serving layer (API-first; dashboard never touches the DB directly) |
+| `serving/` | FastAPI serving layer (API-first; serves both the REST API and the static HTML/JS/CSS dashboard) |
 | `model_registry/` | Filesystem-based model listing/inspection |
 | `monitoring/` | Fleet metrics (arm distribution, override rate, confidence, approval stats) for the dashboard's JSON `/metrics`, plus the Prometheus scrape config + Grafana provisioning/dashboard for `/metrics/prometheus` (see step 10) |
 | `orchestration/pipelines/` | Bootstrap + nightly retrain scripts (POC substitute for Airflow) |
-| `dashboard/` | Streamlit UI: Rate Calendar, Approval Queue, Monitoring, Properties, Scenario Simulator, Recommendations (on-demand daily/weekly/monthly, with context overrides) |
-| `Dockerfile.trainer` / `.api` / `.dashboard` / `.prometheus` / `.grafana`, `podman-compose.yml` | Docker/Podman Compose + Dockerfiles for `bootstrap`, `api`, `dashboard`, `prometheus`, `grafana` (kept at the project root - see note in step 9) |
+| `frontend/` | Static HTML/Bootstrap/JS dashboard UI (served by the API at `/dashboard`) |
+| `Dockerfile.trainer` / `.api` / `.prometheus` / `.grafana`, `podman-compose.yml` | Docker/Podman Compose + Dockerfiles for `bootstrap`, `api`, `prometheus`, `grafana` (kept at the project root - see note in step 9) |
 | `tests/` | pytest suite |
 
 ## Prerequisites
@@ -122,19 +122,18 @@ across a date range, optional `context_overrides`), `GET /rate-calendar`,
 /approval-queue/{id}/approve|reject|override`, `GET /metrics`,
 `GET /metrics/prometheus` (see step 10).
 
-## 6. Run the dashboard
+## 6. Open the dashboard
 
-In a second terminal (with the API from step 5 still running):
+The dashboard is served directly by the API. With the API from step 5
+running, open:
 
-```powershell
-$env:API_BASE_URL = "http://127.0.0.1:8000"
-python -m streamlit run dashboard/app.py
+```
+http://localhost:8000/dashboard
 ```
 
-Opens at `http://localhost:8501` with 6 tabs: Rate Calendar, Approval
-Queue, Monitoring, Properties, Scenario Simulator, Recommendations
-(on-demand daily/weekly/monthly recommendations with optional context
-overrides, then per-day approve/modify/reject).
+The UI has pages for: Rate Calendar, Approval Queue, Monitoring,
+Properties, Scenario Simulator, Recommendations, Model Health, and
+an OTA Storefront demo.
 
 ## 7. Nightly retrain (simulated)
 

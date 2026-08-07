@@ -1,4 +1,4 @@
-"""FastAPI serving layer - API-first design so the Streamlit dashboard (and
+"""FastAPI serving layer - API-first design so the frontend (and
 any future real front-end) never touches the DB or bandit engine directly.
 
 Endpoints:
@@ -12,8 +12,9 @@ Endpoints:
   POST /approval-queue/{decision_id}/reject
   POST /approval-queue/{decision_id}/override
   GET  /storefront/{property_id}             - currently-live (approved/auto_published) prices only - for a demo OTA/brand-site frontend
-  GET  /metrics                              - arm distribution, override rate, confidence, approval stats (JSON, for the Streamlit Monitoring tab)
+  GET  /metrics                              - arm distribution, override rate, confidence, approval stats (JSON, for the Monitoring tab)
   GET  /metrics/prometheus                   - Prometheus text-exposition format (HTTP + business metrics, for Grafana)
+  GET  /dashboard                            - serves the static HTML/JS/CSS frontend
 """
 from __future__ import annotations
 

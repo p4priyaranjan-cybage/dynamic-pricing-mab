@@ -52,3 +52,13 @@ python -m orchestration.pipelines.run_bootstrap
 
 # Step 3: Re-test
 python scripts\run_test_scenarios.py
+
+
+Next steps:
+  podman-compose up        # start the full stack
+  podman-compose down      # stop and remove containers
+
+Services will be available at:
+  API + Dashboard: http://localhost:8000 (dashboard at /dashboard)
+  Prometheus:      http://localhost:9090
+  Grafana:         http://localhost:3000 (admin/admin)

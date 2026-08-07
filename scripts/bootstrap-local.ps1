@@ -10,11 +10,9 @@
 #   .\.venv\Scripts\Activate.ps1
 #   .\scripts\bootstrap-local.ps1
 #
-# Then start the API:
+# Then start the API (serves both the API and the frontend dashboard):
 #   uvicorn serving.api:app --host 0.0.0.0 --port 8000
-#
-# And the dashboard:
-#   python -m streamlit run dashboard/app.py
+#   Open http://localhost:8000/dashboard
 
 $ErrorActionPreference = "Stop"
 
@@ -37,8 +35,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "  1. Start the API:       uvicorn serving.api:app --host 0.0.0.0 --port 8000"
-    Write-Host "  2. Start the dashboard: python -m streamlit run dashboard/app.py"
-    Write-Host "  3. Open dashboard:      http://localhost:8501"
+    Write-Host "  2. Open dashboard:      http://localhost:8000/dashboard"
 } else {
     Write-Host ""
     Write-Host "=== Bootstrap FAILED ===" -ForegroundColor Red

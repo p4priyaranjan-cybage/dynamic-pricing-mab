@@ -51,19 +51,6 @@ services:
       retries: 3
       start_period: 15s
 
-  dashboard:
-    image: localhost/pricing-dashboard
-    build:
-      context: .
-      dockerfile: Dockerfile.dashboard
-    depends_on:
-      api:
-        condition: service_healthy
-    environment:
-      - API_BASE_URL=http://api:8000
-    ports:
-      - "8501:8501"
-
   prometheus:
     image: localhost/pricing-prometheus
     build:
