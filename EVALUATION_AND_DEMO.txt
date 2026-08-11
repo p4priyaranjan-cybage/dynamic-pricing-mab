@@ -1,0 +1,933 @@
+================================================================================
+       DYNAMIC PRICING MAB - TECHNICAL EVALUATION & DEMO GUIDE
+================================================================================
+
+Project: Dynamic Pricing Multi-Armed Bandit (MAB) for Hotel Revenue Management
+Stack:   Python, FastAPI, VowpalWabbit, XGBoost, SQLite, Prometheus, Grafana
+Deploy:  Podman Compose (4 containers: bootstrap, api, prometheus, grafana)
+
+================================================================================
+PART 1: DEMO SCRIPT (Simple, Visual, Everyone Can Understand)
+================================================================================
+
+GOAL: Show how a machine-learning system learns the best price for hotel rooms
+      by trying different prices and observing what works - like a smart
+      revenue manager that never sleeps and learns from every booking.
+
+--- DEMO STEP 1: "The Problem" (2 minutes) ---
+
+TALKING POINT:
+  "Hotels today use static rules or manual gut-feel to set prices.
+   This leaves money on the table:
+   - During a big event (concert, conference), prices should go UP
+   - When occupancy is low, discounts should attract bookings
+   - Different guest types (corporate vs leisure) react differently to price
+   A human can't adjust 1000s of room-rate-date combinations in real time."
+
+VISUAL: Show the 9-arm price ladder (the system's vocabulary of prices):
+  Arm 0: Deep Discount   (-22.5%)    "Low season, far behind target"
+  Arm 1: Discount         (-15.0%)    "Weak demand, behind budget"
+  Arm 2: Slight Discount  ( -6.5%)    "Moderate softness"
+  Arm 3: Base Rate         (  0.0%)    "Normal conditions" (safe default)
+  Arm 4: Slight Premium   ( +6.5%)    "Moderate demand"
+  Arm 5: Premium           (+15.0%)    "Strong demand, conference"
+  Arm 6: High Premium     (+27.5%)    "High occupancy + events"
+  Arm 7: Demand Surge     (+45.0%)    "Nearly sold out"
+  Arm 8: Peak Premium     (+62.5%)    "Exceptional demand, all signals max"
+
+--- DEMO STEP 2: "Start the System" (1 minute) ---
+
+COMMAND:
+  podman-compose up
+
+EXPLAIN:
+  "Four containers spin up:
+   1. Bootstrap - generates synthetic hotel data + trains initial models
+   2. API       - the brain, scores prices in real-time (port 8000)
+   3. Prometheus - collects performance metrics
+   4. Grafana    - live dashboards (port 3000)
+
+   The bootstrap runs FIRST (trains the models), then the API starts.
+   It's all one command."
+
+WAIT: ~2-3 minutes for bootstrap to finish training, then API becomes healthy.
+
+--- DEMO STEP 3: "The Dashboard" (3 minutes) ---
+
+OPEN: http://localhost:8000/dashboard
+
+SHOW EACH TAB:
+  [Rate Calendar]     - "Here's what the system recommends for each day"
+                        Filter by property, room type, rate plan
+                        Color-coded confidence: Green=High, Yellow=Medium, Red=Low
+
+  [Approval Queue]    - "Revenue managers stay in control"
+                        Large price changes need human approval
+                        They can Approve, Reject, or Override with their own price
+
+  [Recommendations]   - "Generate a week's worth of prices in one click"
+                        Pick a property, date range, get full explanation per day
+
+  [Scenario Sim]      - "What-if analysis: change occupancy, events, etc."
+                        NEVER writes to the DB (safe to play with)
+                        Shows how the model reacts to different market conditions
+
+  [Model Health]      - "Arm distribution, confidence stats, override rate"
+                        If all arms collapse to one = model needs investigation
+
+  [Architecture]      - "Visual system overview for technical audience"
+
+--- DEMO STEP 4: "Live API Call" (2 minutes) ---
+
+CURL EXAMPLE (score a live decision):
+  curl -X POST http://localhost:8000/score \
+    -H "Content-Type: application/json" \
+    -d '{
+      "property_id": "marriott_courtyard_nyc_01",
+      "room_type": "standard",
+      "rate_plan": "bar_best_available",
+      "stay_date": "2026-08-20",
+      "los_nights": 2
+    }'
+
+EXPLAIN THE RESPONSE:
+  - reference_rate:       "The base price before any adjustment"
+  - chosen_arm_label:     "The price tier the system recommends"
+  - chosen_arm_offset_pct:"How much above/below the base"
+  - published_price:      "The final dollar amount"
+  - confidence_score:     "How sure the system is (0-1)"
+  - requires_approval:    "Does a human need to approve this?"
+  - all_arms:             "Probability the system gives each price tier"
+  - excluded_arms:        "Arms blocked by guardrails (safety)"
+  - context:              "All the market signals the system considered"
+
+--- DEMO STEP 5: "Scenario Simulator - What-If" (2 minutes) ---
+
+CURL EXAMPLE (simulate high-demand scenario - no side effects):
+  curl -X POST http://localhost:8000/simulate \
+    -H "Content-Type: application/json" \
+    -d '{
+      "property_id": "marriott_courtyard_nyc_01",
+      "room_type": "standard",
+      "rate_plan": "bar_best_available",
+      "stay_date": "2026-08-20",
+      "context_overrides": {
+        "occupancy_pct": 92,
+        "event_flag": true,
+        "event_intensity": 0.8
+      }
+    }'
+
+COMPARE: "See how the recommended arm shifts from Base Rate to Premium
+when we simulate high occupancy + a major event. The model LEARNED this
+from historical booking patterns - it wasn't hand-coded."
+
+THEN DO LOW DEMAND:
+  context_overrides: {"occupancy_pct": 30, "pace_vs_stly_pct": -15}
+
+"Now it recommends a Discount arm to attract bookings. Same model,
+different context, different recommendation. That's contextual learning."
+
+--- DEMO STEP 6: "Safety & Guardrails" (2 minutes) ---
+
+KEY POINTS TO DEMONSTRATE:
+  1. PRICE BOUNDS: System can never go below -22.5% or above +62.5%
+  2. COMPETITIVE POSITIONING: Price stays within 75%-160% of comp-set average
+  3. CHANGE FREQUENCY: Max 2 price changes per day (prevents thrashing)
+  4. APPROVAL ROUTING: Large changes (>3%) or Low confidence -> human approval
+  5. KILL-SWITCH: One config change to "scoring_mode: baseline" reverts to
+     safe Base Rate instantly, without touching any code
+
+SHOW: In the /score response, "excluded_arms" field shows which prices
+were blocked and WHY (e.g., "price/compset index 1.72 above ceiling 1.60")
+
+--- DEMO STEP 7: "Observability" (1 minute) ---
+
+OPEN Grafana: http://localhost:3000 (admin/admin)
+  - Pre-provisioned dashboard: "Dynamic Pricing MAB - Overview"
+  - Shows: decisions/min by arm, avg confidence, approval actions,
+    publisher calls, HTTP request rate, p95 latency
+
+OPEN Prometheus: http://localhost:9090
+  - Query: pricing_decisions_total
+  - Query: pricing_confidence_score_bucket
+
+EXPLAIN: "Every decision is tracked. If the model starts behaving badly,
+you'll see it in the dashboard before guests ever complain."
+
+--- DEMO STEP 8: "The Key Advantages" (1 minute closing) ---
+
+SUMMARIZE:
+  1. LEARNS FROM DATA     - not hand-coded rules, adapts to market shifts
+  2. SAFE BY DEFAULT      - guardrails, approval queue, kill-switch
+  3. MULTI-TENANT         - Marriott and Hyatt data never mix (antitrust safe)
+  4. SCALES               - shared cluster models pool signal, per-property
+                            models specialize. Works for 10 or 100,000 hotels
+  5. EXPLAINABLE          - every recommendation comes with confidence score,
+                            arm probabilities, context, and guardrail trace
+  6. HUMAN-IN-THE-LOOP    - revenue managers approve, reject, or override
+  7. OBSERVABLE           - full Prometheus + Grafana stack, live metrics
+  8. ONE-CLICK DEPLOY     - podman-compose up (or docker compose up)
+
+================================================================================
+
+================================================================================
+PART 2: TECHNICAL EVALUATION QUESTIONS (For Judges/Reviewers)
+================================================================================
+
+---------------------------------------------------------------------------
+SECTION A: ARCHITECTURE & DESIGN DECISIONS
+---------------------------------------------------------------------------
+
+Q1: Why did you choose a Contextual Multi-Armed Bandit (CMAB) over deep
+    reinforcement learning or a traditional optimization approach?
+
+ANSWER POINTS:
+  - CMAB is the right abstraction for this problem: immediate reward per
+    decision (book or no-book), no multi-step planning needed
+  - Sample-efficient: learns from partial feedback (only the chosen arm's
+    reward is observed), unlike supervised learning which needs labels for
+    all options
+  - Interpretable: each arm has a clear meaning (% price offset)
+  - VowpalWabbit's CB_ADF is production-proven, low-latency, and handles
+    high-dimensional categorical context well via hashing
+  - Deep RL would be overkill (no long-horizon planning needed) and
+    sample-hungry (catastrophic in a low-exploration hotel setting)
+
+Q2: Explain the two-level model architecture (PropertyModel + BackboneModel).
+    Why not just one model per property or one global model?
+
+ANSWER POINTS:
+  - Pure per-property: cold-start problem (new hotel has zero data),
+    can't generalize from similar hotels
+  - Pure global: can't specialize (a luxury NYC hotel prices differently
+    from a budget Chicago hotel), tenant isolation violated
+  - Solution: BackboneModel (per cluster x tenant) pools signal from
+    similar hotels; PropertyModel (per hotel) learns that hotel's quirks
+  - Credibility-weighted blend: w = n_observations / (n_observations + k)
+    - New property: w~0, mostly follows backbone (pooled signal)
+    - Established property: w~1, mostly trusts its own experience
+  - k is configurable per-tenant (can opt out of pooling entirely with k~0)
+
+Q3: How do you ensure tenant isolation (e.g., Marriott data never leaks
+    into Hyatt models)?
+
+ANSWER POINTS:
+  - BackboneModel is scoped per (cluster_id, tenant_id) - SEPARATE VW
+    workspaces, separate model files, never share weights
+  - PropertyModel is physically separate per property_id (different file)
+  - Clusters cut ACROSS the org hierarchy (same market cluster may have
+    both Marriott and Hyatt properties), but MODELS within a cluster are
+    always tenant-partitioned
+  - No database-level cross-tenant query is ever performed in training
+  - Config inheritance (extends deep-merge) is per-tenant only
+
+Q4: What is the "scoring_mode" kill-switch and why does it exist?
+
+ANSWER POINTS:
+  - Three modes: "bandit" (normal), "baseline" (always Base Rate), "shadow"
+  - "baseline" mode: one config change in config/tenants/*.yaml instantly
+    reverts ALL recommendations to 0% offset (safe default), no code deploy
+  - "shadow" mode: bandit scores normally and logs its recommendation, but
+    the PUBLISHED price is always the baseline - allows comparing bandit vs
+    human without risk. Useful for A/B validation before going live
+  - This is the "panic button" for revenue managers if the model behaves
+    unexpectedly - zero-code, zero-deploy escape hatch
+
+Q5: Why is the arm ladder asymmetric (-22.5% to +62.5%)?
+
+ANSWER POINTS:
+  - Downside is bounded: can't price below cost floor, brand minimum, or
+    rate parity obligations (OTA contracts)
+  - Upside has more room: surge/compression pricing during events can
+    legitimately go 50-60%+ above BAR
+  - Fine-grained near center (where most data exists): +-6.5% arms capture
+    small adjustments without big jumps
+  - Cluster-specific scaling via "elasticity_spread" factor: luxury clusters
+    (less price-sensitive) get a wider ladder (1.3x), budget clusters may
+    get a narrower one
+
+---------------------------------------------------------------------------
+SECTION B: ALGORITHM & MODEL CORRECTNESS
+---------------------------------------------------------------------------
+
+Q6: How does offline pretraining work when historical data has near-zero
+    exploration (most logs show the same static price)?
+
+ANSWER POINTS:
+  - Problem: 85% of historical logs are Base Rate, 10% are one adjacent
+    tier, 5% are uniform "pilot test" - can't naively train on this
+  - Solution: Fit a REWARD MODEL (XGBoost P(booked) ~ context + offset_pct)
+    with a native MONOTONIC CONSTRAINT (higher price -> lower booking prob)
+  - Use the reward model to IMPUTE what would have happened at every arm
+    for every historical context (counterfactual reasoning)
+  - Augmented training: for each historical row, generate a (best_arm,
+    worst_arm) example pair using the reward model's predictions
+  - Safety nets: premium elasticity floor, distance-based shrinkage,
+    doubly-robust correction at the logged arm
+  - This is an honest model-based warm-start, NOT claimed to be an
+    unbiased off-policy estimator
+
+Q7: What is the "Premium Elasticity Floor" and why is it critical?
+
+ANSWER POINTS:
+  - Problem discovered empirically: XGBoost's monotone_constraints only
+    guarantees DIRECTION (non-increasing), not MAGNITUDE of decline
+  - A too-mild fitted P(booked) decline is mechanically dominated by the
+    ladder's price growth (2.56x from cheapest to priciest arm)
+  - Result: "always pick the most expensive arm" failure mode
+  - Fix: For offset_pct > 0, cap P(booked) at a log-odds curve that
+    declines at least SEGMENT_ELASTICITY_FLOORS[segment] per unit offset
+  - Context-conditioned: corporate travelers (-1.3, less elastic) get a
+    milder floor than leisure travelers (-2.6, more elastic)
+  - Demand-aware: high-occupancy + events RELAX the floor (guests genuinely
+    accept premiums when alternatives are scarce)
+  - This makes the imputed reward VARY by context, preventing the flat
+    "always discount" training signal that causes arm collapse
+
+Q8: What is the confidence score and how is it computed?
+
+ANSWER POINTS:
+  - Composite of 3 components, each [0,1], weighted (default 0.4/0.35/0.25):
+    * C_sample (0.4 weight):   w = n_observations / (n + k)
+      "How much property-specific data exists?"
+    * C_agreement (0.35 weight): 1 - normalized stddev across 5 bag members
+      "Do the backbone's sub-models agree on the best arm?"
+    * C_margin (0.25 weight): gap between top-2 arm probabilities
+      "Is the best arm clearly better than alternatives?"
+  - Bucketed: Low (<0.4), Medium (0.4-0.7), High (>0.7)
+  - Used for: dashboard display AND approval routing (Low confidence ->
+    mandatory human approval regardless of price delta)
+
+Q9: What is the doubly-robust correction and why use it?
+
+ANSWER POINTS:
+  - For the ONE arm each historical row actually tried, don't just trust
+    the reward model's prediction blindly
+  - Correct it toward the real observed outcome using inverse-propensity
+    weighting: correction = (1/propensity) * (observed - predicted)
+  - Propensity is capped (MAX_IPS_WEIGHT=20) to bound variance
+  - This is a pragmatic single-arm approximation of full DR (which would
+    apply across all arms) - documented honestly as such
+  - Result: at the logged arm, the training signal blends model prediction
+    with ground truth; at all other arms, it's pure model imputation
+
+Q10: How does VowpalWabbit's online learning work in this context?
+
+ANSWER POINTS:
+  - VW uses CB_ADF (Contextual Bandit with Action-Dependent Features)
+  - "-q ca" creates quadratic interactions between context (|c) and arm (|a)
+    features automatically - so "high occupancy + premium arm" is a learned
+    feature combination without manual engineering
+  - Online-bagging: 5 independent VW workspaces (BackboneModel), each gets
+    Poisson(1)-resampled copies of each example - provides diversity for the
+    "agreement" confidence component
+  - PropertyModel: single VW workspace, updated immediately on each
+    feedback event (fast online loop)
+  - BackboneModel: ONLY updated via explicit batch retrain (never from a
+    single live event) - prevents one property from instantly influencing
+    another's decisions through the shared model
+
+---------------------------------------------------------------------------
+SECTION C: TRAINING PIPELINE & QUALITY ASSURANCE
+---------------------------------------------------------------------------
+
+Q11: Describe the nightly pipeline (run_nightly.py). What are the 3 steps?
+
+ANSWER POINTS:
+  Step 1 - RECONCILE: For decisions whose stay_date has passed, simulate
+    the realized outcome (booked? cancelled?), compute true_reward (price x
+    (1-commission) if booked+not-cancelled, else 0), feed to that property's
+    PropertyModel.learn() immediately (fast loop)
+  Step 2 - RETRAIN BACKBONES: Rebuild BackboneModels on historical + newly
+    reconciled real outcomes. Property models: ONLY pretrain newly-onboarded
+    ones (only_missing=True) - never touch established properties' weights
+  Step 3 - QUALITY GATE: Run backtest suite on a sample of properties.
+    If CI(bandit - baseline) > 0 -> promote new model version
+    If not -> ROLLBACK backbones to previous version (property models
+    preserved since the gate didn't test them)
+
+Q12: How does the quality gate work? What's the acceptance criterion?
+
+ANSWER POINTS:
+  - run_backtest_suite() tests the trained policy against the static
+    baseline using the TRUE demand model as an oracle simulator
+  - Oracle is NEVER exposed to the bandit itself (only used for evaluation)
+  - Runs on a reproducible sample of 6 properties, 150 rounds each
+  - Computes mean(bandit_reward - baseline_reward) with bootstrap CI
+  - reliably_beats_baseline = True ONLY if the entire CI is above zero
+  - If gate fails: automatic rollback of backbone model artifacts to
+    their previous timestamped version (model_registry/versioning.py)
+  - This prevents a bad retrain from ever reaching production
+
+Q13: How does model versioning and rollback work?
+
+ANSWER POINTS:
+  - Every save() creates a new timestamped directory: v_YYYYMMDD_HHMMSS/
+  - A "current.txt" pointer file says which version is active
+  - load_or_create() always reads the pointer to find the right version
+  - Rollback = update current.txt to point at a previous version tag
+  - Automatic pruning: keeps last 5 versions, deletes older ones
+  - Backward-compatible: if legacy flat .vw files exist (no pointer),
+    loads them directly (migration-friendly)
+
+Q14: What were the key bugs found and fixed during development?
+
+ANSWER POINTS:
+  Bug 1 - "Always pick the most expensive arm":
+    - Cause: reward model extrapolated a too-weak price decline; reward =
+      P(booked) x price was dominated by price growth
+    - Fix: Premium elasticity floor (log-odds decline per unit offset)
+    - Validated: went from -5318 mean reward gap to -112 (best achieved)
+
+  Bug 2 - "Credibility weight inflated at bootstrap":
+    - Cause: PropertyModel.learn() incremented n_observations unconditionally;
+      bootstrap called it 3600 times, giving w=0.994 (99.4% self-trust)
+      before a single real interaction
+    - Fix: count_as_observation=False for bootstrap pretraining
+    - Validated: freshly bootstrapped property now correctly shows w=0,
+      confidence dropped from false-High (0.985) to honest-Medium (0.575)
+
+  Bug 3 - "Nightly pipeline erased online learning every night":
+    - Cause: run_nightly step 2 rebuilt every PropertyModel from scratch,
+      saving n_observations=0 - destroyed reconciled learning from step 1
+    - Fix: only_missing=True (skip established properties, only pretrain new)
+    - Validated: regression test suite tests/test_nightly_learning_preservation.py
+
+  Bug 4 - "Backbone never learned from real bookings":
+    - Cause: training only queried is_historical=True (synthetic data);
+      live decisions are is_historical=False
+    - Fix: query_reconciled_rows() + build_examples_from_reconciled_rows()
+      appends real outcomes to training batch alongside oracle-imputed ones
+    - Validated: reconciled real rows now appear in backbone training data
+
+---------------------------------------------------------------------------
+SECTION D: TESTING & ACCURACY
+---------------------------------------------------------------------------
+
+Q15: What tests exist and what do they cover?
+
+ANSWER POINTS:
+  test_config_loader.py:
+    - deep_merge correctness (child wins on conflict)
+    - tenant inheritance resolves correctly (extends: _defaults)
+    - arm ladder returns 9 sorted arms for any cluster
+    - guardrails resolve with price_bounds for any tenant
+
+  test_reference_rate.py:
+    - Room type multiplier scales correctly (deluxe > standard)
+    - Longer LOS gets lower per-night rate (LOS curve works)
+    - corporate_negotiated correctly excluded from bandit
+
+  test_guardrails.py:
+    - Price bounds exclude out-of-range arms
+    - Never returns zero feasible arms (Base Rate always survives)
+    - Approval routing triggers on large delta OR low confidence
+
+  test_confidence.py:
+    - Confidence is bounded [0, 1] and properly labeled
+    - C_sample component increases with more property observations
+    - blend_smoothing_k near 0 gives full property independence (w~1)
+
+  test_offline_eval.py:
+    - Monotone constraint enforced even with no-signal training data
+    - Premium elasticity floor prevents reward runaway
+    - Reward model returns None for too-few rows or single-class labels
+    - Doubly-robust correction pulls toward observed outcome direction
+    - build_augmented_examples are well-formed and bounded
+
+  test_nightly_learning_preservation.py:
+    - Reconciled rows map correctly to ladder positions
+    - Real outcomes (true_reward) used verbatim, not oracle-imputed
+    - Zero reward is kept as real signal, not dropped
+    - Tiny logged propensity clamped to bound importance weight
+    - property_model_exists correctly detects presence/absence
+    - Saved n_observations survives a load/reload cycle
+    - Bootstrap pretraining does NOT inflate n_observations
+    - only_missing=True prevents resetting established properties
+
+Q16: What is the current model accuracy/performance? Be honest.
+
+ANSWER POINTS:
+  - Current best: mean(bandit - baseline) = -112.8 per 150 rounds
+  - Confidence interval: [-174.4, -58.0] (does NOT cross zero)
+  - 3 out of 12 properties beat the static baseline
+  - This is HONESTLY DOCUMENTED as not yet reliably_beats_baseline
+  - However: it went from -5318 (catastrophic) to -112 (narrow gap)
+    through systematic iteration - a 47x improvement
+  - Known root cause: near-zero-exploration historical data gives
+    insufficient context-conditioned signal at extreme arms
+  - The ARCHITECTURE (quality gate, versioning, rollback) is production-
+    ready; the MODEL TUNING is an open item with documented next steps
+
+Q17: How would you validate this in a real production deployment?
+
+ANSWER POINTS:
+  - Shadow mode first: scoring_mode=shadow logs what the bandit WOULD do
+    without publishing it; compare against human decisions over 2-4 weeks
+  - Once shadow results are positive: A/B test on a subset of properties
+    (some get bandit pricing, some stay manual)
+  - Quality gate runs automatically every night on retrained models -
+    bad models are never promoted
+  - Grafana alerts on arm-distribution collapse (single arm > 90% = bad)
+  - Confidence score threshold: Low-confidence decisions always go to
+    human approval (never auto-published blindly)
+  - Revenue impact measured as: (bandit RevPAR - baseline RevPAR) / nights
+
+---------------------------------------------------------------------------
+SECTION E: FEEDBACK LOOP & LEARNING
+---------------------------------------------------------------------------
+
+Q18: Explain the two-stage reward design (proxy vs true reward).
+
+ANSWER POINTS:
+  - PROXY REWARD (fast, same-day): 1.0 if booked, 0.0 if not
+    Purpose: quick feedback for the XGBoost reward model's binary label
+    Currently only used by offline_eval.py for fitting P(booked)
+  - TRUE REWARD (delayed, after stay): price x (1 - commission) if booked
+    AND not cancelled, else 0.0
+    Purpose: actual revenue signal for online learning (PropertyModel)
+    Computed by reward_reconciliation.py once stay_date has passed
+  - Why two stages: booking signal is immediate (good for fast iteration),
+    but cancellation/no-show only known after the stay (2-30+ days later)
+  - Commission matters: OTA booking at $200 nets $170 (15% commission);
+    direct booking nets $200. The model should prefer direct-channel pricing
+
+Q19: How does the feedback loop close (from decision to model update)?
+
+ANSWER POINTS:
+  1. API makes a decision -> log_decision() -> Decision row in DB
+  2. Guest books (or doesn't) -> outcome stored via reconciliation
+  3. run_nightly Step 1: for decisions whose stay_date passed,
+     simulate_outcome() -> compute true_reward -> PropertyModel.learn()
+     (fast online update, immediately improves that property's model)
+  4. run_nightly Step 2: backbone retrain now includes reconciled rows
+     alongside the original historical dataset (pooled learning)
+  5. Quality gate validates the retrained backbone before promotion
+
+Q20: What happens to a decision that a human rejected or overrode?
+
+ANSWER POINTS:
+  - REJECTED decisions are NEVER reconciled (reconcile_pending_decisions
+    filters on status IN ("approved", "auto_published") only)
+  - They had no real-world outcome to learn from (never shown to a guest)
+  - OVERRIDDEN decisions (human set a different price): the system
+    reconciles using the OVERRIDE PRICE (what the guest actually saw), not
+    the bandit's original proposal - but credits the learning to the
+    bandit's originally CHOSEN ARM (it learns the consequence of its
+    recommendation at the human-adjusted price point)
+
+---------------------------------------------------------------------------
+SECTION F: MULTI-TENANCY & SCALABILITY
+---------------------------------------------------------------------------
+
+Q21: How does the config system work (extends/deep-merge)?
+
+ANSWER POINTS:
+  - Resolution order: Property > Region > Brand > Chain > Global (_defaults)
+  - Each level can override ONLY what it needs (child wins on conflict)
+  - Example: Marriott inherits _defaults.yaml (room types, rate plans,
+    LOS curve, guardrails), overrides nothing -> gets everything from parent
+  - A specific property could override its own guardrails (e.g., tighter
+    price bounds for a newly opened hotel) without affecting the fleet
+  - Adding a new hotel chain = one YAML file extending _defaults
+
+Q22: How does clustering work and why use (cluster x tenant) scoping?
+
+ANSWER POINTS:
+  - Clusters = properties competing in similar markets (region x tier for POC)
+    E.g., "nyc_midscale_urban", "miami_luxury_resort"
+  - Purpose: pool statistical signal from similar properties for better
+    learning (especially for cold-start properties with little own data)
+  - TENANT SCOPING: within the same cluster, Marriott and Hyatt get
+    SEPARATE trained-weight backbones - they pool within their own chain
+    but never across chains (antitrust / competitive sensitivity)
+  - Production upgrade path: data-driven clustering using comp-set overlap
+    + KPI similarity (already has code placeholder: training/clustering.py)
+  - Cluster sizing governance: target 3-500 properties per cluster;
+    below min -> merge; above max -> split
+
+Q23: How does this scale to 100,000+ properties?
+
+ANSWER POINTS:
+  - Model count: ~N_clusters x N_tenants backbone models (sub-linear in
+    properties) + 1 property model each. Not O(properties^2)
+  - Training: each (cluster,tenant) pair is independent -> horizontally
+    parallel as separate K8s Jobs or Airflow DAG tasks
+  - Storage: SQLite for POC, Postgres for production (same SQLAlchemy code)
+  - Model artifacts: local filesystem for POC, object storage (S3/GCS) for
+    production with model_registry metadata table
+  - Serving: stateless FastAPI pods behind a load balancer; models loaded
+    from storage on pod startup. No cross-pod state needed
+  - Data residency: per-region deployments; a region's retrain failure
+    never touches another region's artifacts
+
+---------------------------------------------------------------------------
+SECTION G: API DESIGN & SERVING
+---------------------------------------------------------------------------
+
+Q24: List all API endpoints and their purposes.
+
+ANSWER POINTS:
+  GET  /properties                - Fleet browser (for dropdown pickers)
+  GET  /properties/{id}/config    - Room types + rate plans for a property
+  POST /score                     - Score a LIVE decision (logs to DB)
+  POST /simulate                  - Scenario what-if (dry_run, NEVER writes)
+  POST /recommendations           - Date-range preview (dry_run by default)
+  GET  /rate-calendar             - Current prices per cell (latest non-superseded)
+  GET  /approval-queue            - Pending decisions awaiting human review
+  POST /approval-queue/{id}/approve  - Approve a pending decision
+  POST /approval-queue/{id}/reject   - Reject a pending decision
+  POST /approval-queue/{id}/override - Override with custom price
+  GET  /storefront/{property_id}  - Live prices only (OTA/brand-site view)
+  GET  /metrics                   - JSON fleet metrics (for dashboard monitoring tab)
+  GET  /metrics/prometheus        - Prometheus exposition format (for Grafana)
+  GET  /dashboard                 - Static HTML/JS/CSS frontend
+
+Q25: How does the /simulate endpoint differ from /score?
+
+ANSWER POINTS:
+  - /simulate forces dry_run=True regardless of request body
+  - NEVER writes a Decision row to the database
+  - NEVER affects training (no feedback loop triggered)
+  - NEVER counts toward change_frequency budget
+  - Returns the EXACT same response structure as /score (confidence,
+    all_arms, excluded_arms, context) for full explainability
+  - Used by: Scenario Simulator tab for sensitivity analysis, and
+    /recommendations for preview mode
+
+Q26: How does the approval workflow work end-to-end?
+
+ANSWER POINTS:
+  1. /score runs -> if |price_delta| > 3% OR confidence < 0.4:
+     status = "pending_approval" (not auto-published)
+  2. Revenue manager sees it in /approval-queue (filterable by property)
+  3. Three actions available:
+     - Approve: status -> "approved", published to channels via mock publisher
+     - Reject:  status -> "rejected", price never shown to guests, never
+       reconciled (no learning from an action that never happened)
+     - Override: status -> "approved" with override_price set; published at
+       the human's price. Reconciliation uses override_price but credits
+       the bandit's arm (learns the consequence)
+  4. Prior decisions for the same cell are superseded (superseded_at set)
+
+---------------------------------------------------------------------------
+SECTION H: GUARDRAILS & SAFETY
+---------------------------------------------------------------------------
+
+Q27: How do guardrails prevent the bandit from making bad decisions?
+
+ANSWER POINTS:
+  - PRE-DECISION ACTION MASKING: invalid arms are removed BEFORE the bandit
+    picks, so exploration never wastes probability on infeasible actions
+  - This is fundamentally different from post-hoc rejection (which wastes
+    the model's learning budget on rejected actions it can't learn from)
+  - Rule registry (adding a new constraint = a small function, no model change):
+    * price_bounds: min/max offset clamps
+    * competitive_positioning: floor/ceiling vs compset average
+    * change_frequency: max 2 publishes/day (throttles channel pushes, not scoring)
+    * rate_parity: no-op by construction (single price per cell)
+  - GUARANTEE: Base Rate arm (0% offset) ALWAYS survives filtering, even if
+    every other arm is excluded. System can never have zero feasible actions
+
+Q28: What happens if ALL guardrails fire and exclude every arm?
+
+ANSWER POINTS:
+  - Impossible by design: filter_arms() has a fallback - if the allowed
+    list is empty after all rules run, it forces the Base Rate arm (0%
+    offset) back in. The system ALWAYS has at least one action available
+  - This prevents "cannot compute price" errors in production
+  - The excluded_arms list in the response shows what was blocked and why
+
+Q29: How is rate parity handled?
+
+ANSWER POINTS:
+  - Satisfied BY CONSTRUCTION in this POC: exactly one price per
+    (property, room_type, rate_plan, LOS, stay_date) cell
+  - That same price is pushed to ALL channels (direct + OTA) via the
+    publisher layer - no per-channel differentiation possible
+  - In production (Phase 9): would need active post-publish verification
+    if per-channel pricing were ever introduced
+  - The guardrail exists as a documented placeholder for that future case
+
+---------------------------------------------------------------------------
+SECTION I: DEPLOYMENT & OPERATIONS
+---------------------------------------------------------------------------
+
+Q30: How is the system deployed?
+
+ANSWER POINTS:
+  - 4 containers via podman-compose (or docker compose):
+    1. pricing-bootstrap: one-shot (generates data + trains models), then exits
+    2. pricing-api: FastAPI on port 8000 (waits for bootstrap to complete)
+    3. pricing-prometheus: scrapes /metrics/prometheus every 15s
+    4. pricing-grafana: auto-provisioned dashboards (admin/admin on port 3000)
+  - Shared named volumes: pricing-data (SQLite DB), model-artifacts (VW files)
+  - Bootstrap is IDEMPOTENT: skips if data already exists (checks
+    properties AND historical rows count - catches interrupted runs)
+  - API healthcheck: polls GET /properties every 10s with 6 retries
+
+Q31: How would you move this to production?
+
+ANSWER POINTS:
+  - Database: SQLite -> Postgres (same SQLAlchemy, just change DATABASE_URL)
+  - Model storage: local filesystem -> S3/GCS with model_registry table
+  - Orchestration: run_bootstrap/run_nightly scripts -> Airflow DAGs
+    (one per cluster for parallel training)
+  - Serving: single FastAPI process -> horizontally scaled pods behind ALB
+  - Context: synthetic context_builder -> real ETL from PMS/BI feeds
+    (same field names as context_schema.yaml - plug-and-play)
+  - Feedback: simulated outcomes -> real PMS booking webhooks
+  - Monitoring: already Prometheus/Grafana ready; add PagerDuty alerting
+
+Q32: What does the bootstrap pipeline do and why is it idempotent?
+
+ANSWER POINTS:
+  - Generates synthetic properties from config/tenants/*.yaml
+  - Creates historical booking data (synthetic, mirrors real RMS patterns)
+  - Trains all backbone and property models from scratch
+  - Idempotent check: if DB has properties AND sufficient historical rows
+    (>= 100 per property), skips entirely. This handles:
+    * Normal re-runs (already complete)
+    * Interrupted runs (partial data detected, completes remaining work)
+  - FORCE_BOOTSTRAP=1 env var overrides the check (for development)
+
+---------------------------------------------------------------------------
+SECTION J: ADVANCED / CHALLENGE QUESTIONS
+---------------------------------------------------------------------------
+
+Q33: Why VowpalWabbit instead of a custom neural network or PyTorch model?
+
+ANSWER POINTS:
+  - VW is purpose-built for contextual bandits (CB_ADF mode)
+  - Sub-millisecond inference (critical for real-time pricing APIs)
+  - Handles high-dimensional sparse categorical features natively via
+    feature hashing (no embedding tables needed)
+  - Online learning: updates incrementally without full retraining
+  - Proven at scale: used by Microsoft for ad placement (similar problem)
+  - "-q ca" auto-generates interaction features between context and arms
+  - Deterministic and reproducible given the same random seed
+
+Q34: What's the exploration strategy? How do you balance explore vs exploit?
+
+ANSWER POINTS:
+  - VW's CB_ADF with --cb_explore_adf uses epsilon-greedy by default
+  - LIVE SERVING: explore=True for real decisions (small epsilon allows
+    the model to occasionally try non-greedy arms for learning)
+  - BACKTEST/SIMULATION: explore=False (pure greedy, measures policy quality)
+  - DRY_RUN (simulate): explore=False (shows the model's best guess)
+  - The propensity field is ALWAYS logged (importance-weight correction
+    for any off-policy analysis later)
+  - Historical data has its own exploration pattern: 85% baseline +
+    10% adjacent heuristic + 5% uniform pilot (realistic for hotel RMS)
+
+Q35: What would happen if a competitor chain stole your model artifacts?
+
+ANSWER POINTS:
+  - They get a VW binary blob (not human-readable weights)
+  - The model is useless without the EXACT same arm ladder, context schema,
+    and reference rate composition - all of which are config-driven and
+    chain-specific
+  - Tenant isolation ensures no cross-chain data ever touches a model file
+  - In production: model artifacts in S3 with IAM policies per tenant
+
+Q36: How do you handle new properties (cold start)?
+
+ANSWER POINTS:
+  - New property gets a PropertyModel pretrained from its CLUSTER's shared
+    reward model (not its own sparse data)
+  - n_observations starts at 0 (by design, count_as_observation=False)
+  - Credibility weight w = 0 / (0 + k) = 0: 100% backbone-driven initially
+  - As real bookings accumulate, w grows and the property gradually
+    "graduates" to trusting its own learned preferences
+  - Backbone provides reasonable prices from day 1 (learned from similar
+    hotels in the same market cluster)
+  - This is the empirical Bayes credibility-weighting pattern from
+    actuarial science, applied to hotel pricing
+
+Q37: What are the known limitations and what would you fix next?
+
+ANSWER POINTS:
+  KNOWN LIMITATIONS:
+  - Model does not yet reliably beat static baseline in backtest
+    (CI [-174, -58], 3/12 properties win) - documented honestly
+  - At least one property shows fully collapsed arm distribution
+    (backbone-level issue, not property-level)
+  - No same-day learning loop (EnsemblePolicy.record_feedback exists but
+    is never called from serving/api.py - all learning is delayed)
+  - Synthetic data only (no real PMS integration yet)
+  - Single-region deployment (no multi-region failover)
+
+  NEXT STEPS (ordered by expected impact):
+  1. Raise PILOT_EXPLORATION_PROB further (0.15 -> 0.25) or use stratified
+     exploration (context-aware, not uniform) for richer extreme-arm signal
+  2. Context-conditioned premium elasticity floor (partially done: segment-
+     aware floors exist; extend to occupancy/event/pace interactions)
+  3. More training data per cluster (raise BACKBONE_HISTORY_CAP from 8000)
+  4. Retry numeric offset_pct VW arm feature with proper normalization
+  5. Implement the same-day fast loop (call record_feedback from /score
+     when a rapid booking signal is available)
+
+Q38: How does the demand model work (the "ground truth" oracle)?
+
+ANSWER POINTS:
+  - Logistic regression: logit = BASE + demand_signals - elasticity*offset
+  - Demand signals: occupancy, pace, event_intensity, compset index, pickup
+  - Elasticity is segment-specific AND rate-plan-specific:
+    * Corporate travelers: 0.55x base elasticity (price-insensitive)
+    * Leisure travelers: 1.25x base elasticity (price-sensitive)
+    * Government/military plan: 0.7x modifier (captive demand, per diem)
+    * Special offer plan: 1.15x modifier (deal-seekers compare aggressively)
+  - Cancellation model: base 12%, higher for groups (+5%), lower for
+    advance-purchase plans
+  - This oracle is NEVER exposed to the bandit engine - only used by:
+    (a) run_backtest as evaluation oracle, (b) reward_reconciliation for
+    simulating realized outcomes in the POC
+
+Q39: How do you prevent the system from "going rogue" (pricing $1 or $10,000)?
+
+ANSWER POINTS:
+  - Layer 1: Arm ladder is DISCRETE and bounded (-22.5% to +62.5% of
+    reference rate). The system can ONLY pick from predefined tiers
+  - Layer 2: Guardrails exclude arms that violate price bounds or
+    competitive positioning rules BEFORE the bandit even sees them
+  - Layer 3: Change frequency throttle (max 2/day) prevents rapid thrashing
+  - Layer 4: Approval queue catches large deltas (>3%) and low confidence
+  - Layer 5: Kill-switch (scoring_mode: baseline) instantly reverts to safe
+    Base Rate without code changes or deployments
+  - Layer 6: Quality gate blocks bad model versions from being promoted
+  - Layer 7: Grafana alerting on arm-distribution collapse
+  - TOTAL: 7 independent safety layers, any one of which prevents harm
+
+Q40: What's the reference rate and how is it composed?
+
+ANSWER POINTS:
+  ReferenceRate = BAR(property) x RoomTypeMultiplier x RatePlanOffset x LOSCurve
+
+  - BAR: property's base nightly rate (set by revenue team, stored in DB)
+  - RoomTypeMultiplier: standard=1.0, deluxe=1.15, suite=1.5
+  - RatePlanOffset: BAR=1.0, government=0.75, senior=0.85, special=0.90,
+    corporate_negotiated=0.80 (but this one is excluded from bandit)
+  - LOSCurve: 1-night=1.0, 2-night=0.98, 3-5=0.95, 6-8=0.90, 9+=0.85
+
+  The bandit's job is ONLY the % offset on top of this reference rate.
+  It doesn't reinvent pricing from scratch - it nudges an already-sensible
+  base price up or down based on market conditions.
+
+---------------------------------------------------------------------------
+SECTION K: QUICK-FIRE FACTUAL QUESTIONS
+---------------------------------------------------------------------------
+
+Q41: How many arms in the default ladder?         -> 9
+Q42: How many bag members in BackboneModel?       -> 5 (online-bagging ensemble)
+Q43: Default blend_smoothing_k?                   -> 20
+Q44: Max price changes per day?                   -> 2
+Q45: Approval delta threshold?                    -> 3% (0.03)
+Q46: Min confidence for auto-publish?             -> 0.4
+Q47: Competitive positioning bounds?              -> 75% - 160% of compset avg
+Q48: How many tenants in the POC?                 -> 2 (Marriott, Hyatt)
+Q49: How many clusters?                           -> 6 (3 regions x 2 tiers)
+Q50: Model versioning retention?                  -> Last 5 versions kept
+Q51: BackboneModel learning rate?                 -> 0.5 (VW)
+Q52: Reward model (XGBoost) max_depth?            -> 3
+Q53: Reward model n_estimators?                   -> 300 (with early stopping)
+Q54: How many context features?                   -> 22 (per context_schema.yaml)
+Q55: Database for POC?                            -> SQLite (WAL mode, 30s timeout)
+Q56: Quality gate sample size?                    -> 6 properties, 150 rounds each
+Q57: MAX_IPS_WEIGHT (propensity cap)?             -> 20.0
+Q58: RELIABLE_AUC_THRESHOLD?                      -> 0.55
+Q59: Training passes per backbone batch?          -> 3 (N_PASSES in policy.py)
+Q60: Channels supported?                          -> direct (0% commission),
+                                                     ota_mock (15% commission)
+
+================================================================================
+PART 3: ARCHITECTURE DIAGRAM (For Presentation Slides)
+================================================================================
+
+SIMPLE VERSION (for non-technical audience):
+
+  +----------+     +-----------+     +----------+     +----------+
+  | Market   | --> | ML Brain  | --> | Safety   | --> | Revenue  |
+  | Signals  |     | (Bandit)  |     | Checks   |     | Manager  |
+  +----------+     +-----------+     +----------+     +----------+
+  occupancy         picks best        guardrails       approves/
+  events            price tier        confidence       rejects/
+  comp-set          from 9 options    bounds           overrides
+  pace/pickup
+
+  THEN -> Published to booking channels (OTA, direct website)
+  THEN -> Guest books (or doesn't) -> feedback loops back to ML Brain
+
+
+TECHNICAL VERSION (for engineering audience):
+
+  Layer 1: DATA
+    context_generator -> synthetic BI feed (swap for real ETL in production)
+    demand_model -> ground-truth oracle (evaluation only, never seen by bandit)
+
+  Layer 2: TRAINING
+    offline_eval.py -> XGBoost reward model (monotonic, context-conditioned)
+    train.py -> fleet orchestrator (backbones + property models)
+    run_bootstrap.py -> one-time initial training
+    run_nightly.py -> reconcile + retrain + quality gate
+
+  Layer 3: SERVING
+    FastAPI (serving/api.py) -> all endpoints
+    EnsemblePolicy -> credibility-weighted property + backbone blend
+    guardrails/constraints.py -> pre-decision action masking
+    decision_logger.py -> append-only audit log
+
+  Layer 4: FEEDBACK
+    reward_reconciliation.py -> delayed true reward computation
+    PropertyModel.learn() -> fast online updates (per property, isolated)
+    BackboneModel.learn_batch() -> slow batch updates (per cluster x tenant)
+
+  Layer 5: OBSERVABILITY
+    Prometheus -> scrapes /metrics/prometheus every 15s
+    Grafana -> pre-provisioned dashboards (zero setup)
+    /metrics JSON -> dashboard monitoring tab
+
+  Layer 6: SAFETY
+    Guardrails (action masking) -> Approval Queue -> Kill-Switch
+    Quality Gate -> Model Versioning -> Automatic Rollback
+
+================================================================================
+PART 4: COMMON OBJECTIONS AND RESPONSES
+================================================================================
+
+OBJECTION: "But the model doesn't beat the baseline yet!"
+RESPONSE:  "Correct - and that's why the quality gate EXISTS. The system is
+designed so a model that fails backtest NEVER reaches production. The
+architecture IS production-ready (versioning, rollback, kill-switch); the
+model tuning is an open item with a documented path to resolution. In a
+real deployment, you'd have real (not synthetic) data with richer signal."
+
+OBJECTION: "Why not just use a simple rule-based system?"
+RESPONSE:  "Rules can't learn. A rule says 'if occupancy > 80%, raise
+price 10%.' But what if comp-set also raised prices? What if it's a
+leisure segment that's more price-sensitive? A contextual bandit considers
+ALL signals simultaneously and learns the optimal response from data -
+including interactions a human rule-writer would never think to specify."
+
+OBJECTION: "This is a black box - revenue managers won't trust it."
+RESPONSE:  "Every decision comes with: confidence score, arm probabilities
+for all 9 price tiers, which arms were excluded by guardrails and why,
+the full context snapshot that drove the decision. Large changes require
+human approval. The kill-switch reverts to safe mode in one config change.
+This is more transparent than most rule-based systems."
+
+OBJECTION: "How do you handle seasonality / one-off events?"
+RESPONSE:  "Context features include occupancy, event_flag, event_intensity,
+pace_vs_stly, day_of_week, lead_time. The model doesn't need a separate
+'seasonality module' - it LEARNS that high occupancy + weekend + event =
+premium pricing is justified, directly from booking outcomes."
+
+OBJECTION: "What about regulatory compliance / rate parity / antitrust?"
+RESPONSE:  "Rate parity: by construction (one price per cell, same across
+all channels). Antitrust: tenant isolation (Marriott and Hyatt never share
+model weights). Regulatory: all decisions are logged with full audit trail,
+human approval for large changes, configurable guardrails per jurisdiction."
+
+================================================================================
+END OF DOCUMENT
+================================================================================

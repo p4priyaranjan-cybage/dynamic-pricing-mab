@@ -82,6 +82,7 @@ Verification section.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import math
 import random
@@ -170,6 +171,17 @@ MAX_IPS_WEIGHT = 20.0  # caps 1/propensity in the doubly-robust correction to bo
 MIN_PROPENSITY = 1e-3
 RELIABLE_AUC_THRESHOLD = 0.55  # holdout AUC below this -> diagnostics.reliable = False
 
+# Floor on a LOGGED propensity when replaying reconciled real outcomes into VW.
+# VW applies an effective importance weight of 1/propensity, so an unclamped
+# tiny value would let one lucky exploration row dominate the batch. Tied to
+# MAX_IPS_WEIGHT so both variance guards move together.
+MIN_LOGGED_PROPENSITY = 1.0 / MAX_IPS_WEIGHT  # = 0.05
+# How many times each reconciled real outcome is replayed into the batch.
+# 1 = real outcomes influence the model in proportion to how many exist
+# (deliberately gentle while the live dataset is small). Raise once there is
+# enough real feedback to outweigh the oracle-imputed examples.
+RECONCILED_REPEATS = 1
+
 
 def _raw_features(context: dict, offset_pct: float) -> list[float]:
     """Feature vector for the reward model. Includes:
@@ -238,6 +250,100 @@ def query_historical_rows(cluster_id: str | None = None, tenant_id: str | None =
         return _query_historical_rows(session, cluster_id, tenant_id, property_id, cap=cap)
     finally:
         session.close()
+
+
+# --------------------------------------------------------------------------- #
+# Reconciled REAL outcomes (is_historical=False) - the live feedback loop
+#
+# `_query_historical_rows` above deliberately filters is_historical=True, i.e.
+# the synthetic bootstrap dataset only. Live decisions are logged with
+# is_historical=False (feedback/decision_logger.py), so without the helpers
+# below the backbone would never learn anything from real bookings - it would
+# re-fit the same static dataset every night forever.
+# --------------------------------------------------------------------------- #
+
+def _query_reconciled_rows(session, cluster_id: str | None = None, tenant_id: str | None = None,
+                            property_id: str | None = None, cap: int | None = None):
+    """Live decisions that have a realized outcome attached.
+
+    Mirrors the filter in feedback/reward_reconciliation.py: only rows that
+    were actually servable to a guest get reconciled, so `reconciled_at IS
+    NOT NULL` already excludes rejected / still-pending / dry-run decisions.
+    """
+    q = session.query(Decision).filter(
+        Decision.is_historical.is_(False),
+        Decision.is_dry_run.is_(False),
+        Decision.reconciled_at.isnot(None),
+    )
+    if cluster_id is not None:
+        q = q.filter(Decision.cluster_id == cluster_id)
+    if tenant_id is not None:
+        q = q.filter(Decision.tenant_id == tenant_id)
+    if property_id is not None:
+        q = q.filter(Decision.property_id == property_id)
+    rows = q.all()
+    if cap is not None and len(rows) > cap:
+        # Keep the most recent rows rather than a random sample - recency
+        # matters for real market feedback in a way it doesn't for the
+        # synthetic historical set.
+        rows = sorted(rows, key=lambda d: d.decision_ts or _dt.datetime.min)[-cap:]
+    return rows
+
+
+def query_reconciled_rows(cluster_id: str | None = None, tenant_id: str | None = None,
+                           property_id: str | None = None, cap: int | None = None) -> list[Decision]:
+    """Public, session-managing wrapper around `_query_reconciled_rows`."""
+    session = get_session()
+    try:
+        return _query_reconciled_rows(session, cluster_id, tenant_id, property_id, cap=cap)
+    finally:
+        session.close()
+
+
+def build_examples_from_reconciled_rows(rows: list[Decision], ladder: list[dict]) -> list[dict]:
+    """Turn reconciled REAL outcomes into VW training examples.
+
+    Unlike `build_augmented_training_examples_from_rows` (which synthesises a
+    best/worst arm pair per context from the oracle), this uses ground truth
+    only: the arm that was actually played, the propensity it was played
+    with, and the realized `true_reward`. No imputation, no oracle.
+
+    Scale note: oracle examples carry a probability-weighted EXPECTATION
+    (roughly $70-200), whereas `true_reward` is the realized outcome - either
+    0.0 or the full net price. Same units, higher variance. In practice the
+    reconciled set is small relative to the oracle set early on, so its
+    influence grows gradually; `RECONCILED_REPEATS` is the knob to amplify it
+    once there is enough real data to trust. The nightly quality gate
+    (run_backtest_suite) is what actually validates the mix.
+    """
+    if not rows:
+        return []
+
+    by_index = {a["index"]: pos for pos, a in enumerate(ladder)}
+    examples: list[dict] = []
+    for d in rows:
+        pos = by_index.get(d.arm_index)
+        if pos is None:
+            # Arm ladder changed since this decision was logged - skip rather
+            # than mis-attribute the reward to a different arm.
+            continue
+        try:
+            ctx = json.loads(d.context_json)
+        except (TypeError, ValueError):
+            continue
+        # Clamp the logged propensity so 1/p (the effective importance weight
+        # VW applies) stays bounded, consistent with MAX_IPS_WEIGHT.
+        propensity = max(float(d.propensity or 0.0), MIN_LOGGED_PROPENSITY)
+        example = {
+            "context": ctx,
+            "arms": ladder,
+            "chosen_pos": pos,
+            "propensity": propensity,
+            "reward": float(d.true_reward or 0.0),
+        }
+        for _ in range(RECONCILED_REPEATS):
+            examples.append(example)
+    return examples
 
 
 def fit_reward_model(rows: list[Decision]) -> RewardModel | None:

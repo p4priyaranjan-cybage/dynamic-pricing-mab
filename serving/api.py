@@ -709,15 +709,28 @@ _FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_redirect():
-    """Serve the main dashboard HTML."""
+    """Serve the main dashboard HTML (Revenue Manager workspace)."""
     index_path = _FRONTEND_DIR / "index.html"
     if index_path.exists():
         return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>Frontend not found. Check frontend/ directory.</h1>", status_code=404)
 
 
+@app.get("/ota-demo", response_class=HTMLResponse)
+def ota_demo_page():
+    """Serve the standalone OTA/brand demo page (guest-facing price display)."""
+    ota_path = _FRONTEND_DIR / "ota-demo.html"
+    if ota_path.exists():
+        return HTMLResponse(content=ota_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>OTA demo page not found.</h1>", status_code=404)
+
+
 # Mount static assets (CSS, JS) - this MUST be after all route definitions
 # to avoid catching API routes. Mounted at /css, /js paths.
 if _FRONTEND_DIR.exists():
-    app.mount("/css", StaticFiles(directory=str(_FRONTEND_DIR / "css")), name="css")
-    app.mount("/js", StaticFiles(directory=str(_FRONTEND_DIR / "js")), name="js")
+    _css_dir = _FRONTEND_DIR / "css"
+    _js_dir = _FRONTEND_DIR / "js"
+    if _css_dir.exists():
+        app.mount("/css", StaticFiles(directory=str(_css_dir)), name="css")
+    if _js_dir.exists():
+        app.mount("/js", StaticFiles(directory=str(_js_dir)), name="js")

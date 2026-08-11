@@ -54,8 +54,8 @@ Both channels feed into model improvement, but through different mechanisms and 
 │   └────────────────────────────────────────────────────────────────────┘   │
 │        ^                                                                     │
 │        │                                                                     │
-│        │  Nightly retrain incorporates ALL reconciled data into              │
-│        │  backbone models (batch update, quality-gated)                      │
+│        │  Nightly retrain replays reconciled outcomes into the backbone      │
+│        │  alongside the oracle examples (batch, quality-gated)               │
 │        │                                                                     │
 │   ┌────┴────┐                                                                │
 │   │  Model  │                                                                │
@@ -252,21 +252,35 @@ For each qualifying decision:
    └─────────────────────────────────────────────────────┘
 
 3. COMPUTE REWARDS
+   (see context_generator/demand_model.py :: compute_rewards)
    ┌─────────────────────────────────────────────────────┐
-   │ proxy_reward = effective_price if booked else 0      │
+   │ proxy_reward = 1.0 if booked else 0.0                │
+   │   -> a BINARY flag, not a dollar amount. Used as     │
+   │      the training label for the XGBoost reward       │
+   │      model (P(booked) ~ context + offset).           │
    │                                                     │
-   │ true_reward = effective_price                        │
-   │             * (1 if booked else 0)                   │
-   │             * (1 - cancellation_rate)                │
-   │             * (1 - channel_commission)               │
+   │ if booked AND not cancelled:                         │
+   │     true_reward = effective_price                     │
+   │                 * (1 - channel_commission)            │
+   │ else:                                                │
+   │     true_reward = 0.0                                │
    │                                                     │
-   │ Example:                                            │
-   │   price=$250, booked=True, cancel=False, OTA=15%    │
-   │   true_reward = $250 * 1 * 1 * 0.85 = $212.50      │
+   │   -> cancellation is a HARD zero, not a scaling      │
+   │      factor. A cancelled booking earns nothing.      │
+   │   -> commission: direct = 0%, ota_mock = 15%         │
    │                                                     │
-   │   price=$300, booked=False                          │
-   │   true_reward = $0                                  │
+   │ Examples ($250 price):                               │
+   │   booked, stayed, direct  -> $250.00                │
+   │   booked, stayed, OTA     -> $212.50 (15% cut)      │
+   │   booked, then cancelled  -> $0.00                  │
+   │   never booked            -> $0.00                  │
    └─────────────────────────────────────────────────────┘
+
+   NOTE: `compute_rewards`' docstring says the proxy reward drives the
+   property model's online loop and the true reward drives the backbone.
+   In the current code, reward_reconciliation.py feeds `true_reward` to
+   PropertyModel.learn() - the proxy is only consumed as the offline
+   reward-model label. Treat the docstring as intent, the code as truth.
 
 4. ONLINE LEARNING UPDATE
    ┌─────────────────────────────────────────────────────┐
@@ -468,9 +482,11 @@ Decision Made (t=0)
 │               └── n_observations++
 │
 └── SAME NIGHT: Nightly retrain
-                ├── Backbone retrained on ALL reconciled data (batch)
-                ├── Property models retrained (batch, fresh start + all data)
-                ├── Quality gate (backtest)
+                ├── Backbone retrained on historical rows + reconciled real
+                │     outcomes (the update above now reaches the pooled model)
+                ├── Property models left intact - this run's online update
+                │     and its n_observations increment are preserved
+                ├── Quality gate (backtest); on failure only backbones revert
                 └── Promote or rollback
 
 Total feedback latency: lead_time_days + 1 night

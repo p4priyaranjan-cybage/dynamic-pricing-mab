@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Poster Exporter — Dynamic Pricing MAB</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; margin:0; padding:28px; color:#0f172a; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { color:#64748b; margin: 0 0 20px; font-size: 14px; }
+  .panel { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px 20px; margin-bottom:18px; }
+  label { font-weight:600; font-size:14px; margin-right:8px; }
+  select, button, input[type=file] { font-size:14px; padding:8px 12px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; }
+  button { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border:none; font-weight:700; cursor:pointer; }
+  button:hover { filter:brightness(1.08); }
+  button:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+  .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .hint { font-size:13px; color:#64748b; margin-top:10px; }
+  #status { font-size:14px; font-weight:600; margin-left:6px; }
+  #preview { width:100%; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
+  code { background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Poster Exporter</h1>
+  <p class="sub">Renders <code>how-it-works-poster.svg</code> to a high-resolution PNG entirely in your browser. No installs.</p>
+
+  <div class="panel">
+    <div class="row">
+      <label for="scale">Export resolution</label>
+      <select id="scale">
+        <option value="1">1x &mdash; 2000 &times; 3400 px (screen)</option>
+        <option value="2" selected>2x &mdash; 4000 &times; 6800 px (A2 @ 300dpi)</option>
+        <option value="3">3x &mdash; 6000 &times; 10200 px (A1 @ 300dpi)</option>
+        <option value="4">4x &mdash; 8000 &times; 13600 px (A0 / large format)</option>
+      </select>
+      <button id="btnPng" disabled>Download PNG</button>
+      <span id="status">Loading SVG&hellip;</span>
+    </div>
+    <div class="hint">
+      If the SVG did not load automatically (opening this file directly from disk can block it),
+      pick the file manually: <input type="file" id="picker" accept=".svg,image/svg+xml">
+    </div>
+  </div>
+
+  <div class="panel">
+    <div style="font-weight:600; font-size:14px; margin-bottom:10px;">Preview</div>
+    <img id="preview" alt="Poster preview">
+  </div>
+</div>
+
+<script>
+const SVG_FILE = 'how-it-works-poster.svg';
+const W = 2000, H = 3400;
+let svgText = null;
+
+const statusEl  = document.getElementById('status');
+const btnPng    = document.getElementById('btnPng');
+const scaleSel  = document.getElementById('scale');
+const previewEl = document.getElementById('preview');
+const pickerEl  = document.getElementById('picker');
+
+function setStatus(msg, ok) {
+  statusEl.textContent = msg;
+  statusEl.style.color = ok ? '#059669' : '#b91c1c';
+}
+
+function svgToDataUri(text) {
+  // encodeURIComponent keeps UTF-8 entities intact for the Image loader
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(text);
+}
+
+function useSvg(text) {
+  svgText = text;
+  previewEl.src = svgToDataUri(text);
+  btnPng.disabled = false;
+  setStatus('Ready', true);
+}
+
+// Try to fetch the SVG sitting next to this HTML file
+fetch(SVG_FILE)
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+  .then(useSvg)
+  .catch(() => setStatus('Could not auto-load — use the file picker below', false));
+
+pickerEl.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => useSvg(fr.result);
+  fr.readAsText(f);
+});
+
+btnPng.addEventListener('click', () => {
+  if (!svgText) return;
+  const scale = parseInt(scaleSel.value, 10);
+  setStatus('Rendering at ' + scale + 'x\u2026', true);
+  btnPng.disabled = true;
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = W * scale;
+    canvas.height = H * scale;
+    const ctx = canvas.getContext('2d');
+    // white backing so the PNG is not transparent when printed
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dynamic-pricing-how-it-works-' + scale + 'x.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Downloaded at ' + canvas.width + ' \u00d7 ' + canvas.height + ' px', true);
+      btnPng.disabled = false;
+    }, 'image/png');
+  };
+  img.onerror = () => {
+    setStatus('Render failed', false);
+    btnPng.disabled = false;
+  };
+  img.src = svgToDataUri(svgText);
+});
+</script>
+</body>
+</html>

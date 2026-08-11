@@ -1,18 +1,26 @@
 """Nightly pipeline (POC substitute for a scheduled Airflow DAG): reconciles
-delayed true rewards for decisions whose stay_date has passed, then
-retrains each (cluster, tenant) backbone on the freshest historical +
-reconciled data, with a QUALITY GATE that blocks deployment of a retrained
-model if it doesn't pass the backtest acceptance criteria.
+delayed true rewards for decisions whose stay_date has passed, then retrains
+each (cluster, tenant) backbone on the synthetic historical dataset PLUS the
+reconciled real outcomes accumulated since the last run, with a QUALITY GATE
+that blocks deployment of a retrained model if it fails backtest acceptance.
 
 Run daily:
     python -m orchestration.pipelines.run_nightly
 
-Quality gate behavior:
-  - After retraining, runs `run_backtest_suite` on a sample of properties.
-  - If `reliably_beats_baseline` is True: promote the new model (already saved
-    as the 'current' version by model versioning).
-  - If False: rollback ALL backbone and property models to their previous
-    version, log a warning. The system continues serving the prior model.
+What each step touches:
+  - Step 1 reconcile: updates each affected PropertyModel online with the
+    realized `true_reward` and increments its `n_observations`.
+  - Step 2 retrain: rebuilds BACKBONE models only. Property models are passed
+    `only_missing=True` so established ones keep the weights and observation
+    count Step 1 just earned; only newly onboarded properties get pretrained.
+  - Step 3 gate: runs `run_backtest_suite` on a sample of properties.
+      * `reliably_beats_baseline` True  -> promote (already saved as 'current').
+      * False -> roll BACKBONES back to their previous version. Property models
+        are NOT rolled back: the gate did not evaluate them, and reverting
+        would discard genuine reconciled learning from Step 1.
+
+See docs/ARCHITECTURE.md section 9 for the reward design and the history of
+the two bugs this ordering now guards against.
 
 See docs/ARCHITECTURE.md "Model Versioning" and docs/ARCHITECTURE_REVIEW.md
 "Gap 3: No Automated Model-Quality Gate" for the design rationale.
@@ -57,11 +65,20 @@ def _sample_properties_for_backtest(property_ids: list[str], n: int, seed: int =
 
 
 def _rollback_all_models(property_ids: list[str], cluster_tenant_pairs: list[tuple[str, str]]) -> dict:
-    """Rollback ALL backbone and property models to their previous version."""
+    """Rollback the retrained BACKBONE models to their previous version.
+
+    Property models are intentionally preserved - see the comment at the
+    property loop below. `property_ids` is still accepted so the caller's
+    contract is unchanged, and is reported as `properties_preserved`.
+    """
     from pathlib import Path
     MODEL_BASE = Path(__file__).resolve().parent.parent.parent / "model_registry" / "artifacts"
 
-    rolled_back = {"backbones": [], "properties": []}
+    rolled_back = {
+        "backbones": [],
+        "properties": [],
+        "properties_preserved": len(property_ids),
+    }
 
     for cluster_id, tenant_id in cluster_tenant_pairs:
         base_dir = MODEL_BASE / "backbone" / f"{tenant_id}__{cluster_id}"
@@ -70,13 +87,16 @@ def _rollback_all_models(property_ids: list[str], cluster_tenant_pairs: list[tup
             rolled_back["backbones"].append(f"{tenant_id}__{cluster_id} -> {result}")
             logger.info(f"Rolled back backbone {tenant_id}__{cluster_id} to {result}")
 
-    for property_id in property_ids:
-        base_dir = MODEL_BASE / "property" / property_id
-        result = rollback(base_dir)
-        if result:
-            rolled_back["properties"].append(f"{property_id} -> {result}")
-
-    logger.info(f"Rollback complete: {len(rolled_back['backbones'])} backbones, {len(rolled_back['properties'])} properties")
+    # Property models are deliberately NOT rolled back. The quality gate
+    # evaluates the retrained BACKBONES; property models were not retrained by
+    # this run (see Step 2, only_missing=True) - their latest version is the
+    # one Step 1 saved after applying genuine reconciled rewards. Reverting it
+    # because a backbone backtest failed would silently discard real
+    # real-world learning that the gate never actually tested.
+    logger.info(
+        f"Rollback complete: {len(rolled_back['backbones'])} backbones. "
+        f"Property models left intact (they carry reconciled online learning)."
+    )
     return rolled_back
 
 
@@ -91,9 +111,16 @@ def main() -> dict:
     backbone_summary, reward_model_cache = bootstrap_backbones()
     logger.info(f"Retrained {len(backbone_summary)} backbone models")
 
-    # Also retrain property models with the fresh reward model cache
-    property_summary = bootstrap_properties(reward_model_cache)
-    logger.info(f"Retrained {len(property_summary)} property models")
+    # Property models: pretrain ONLY the ones that don't have an artifact yet
+    # (newly onboarded properties). Established properties are deliberately
+    # left alone - they were just updated online by Step 1, and rebuilding
+    # them here would construct fresh PropertyModel instances with
+    # n_observations = 0, wiping that learning and resetting the ensemble
+    # credibility weight w = n/(n+k) to zero every single night.
+    property_summary = bootstrap_properties(reward_model_cache, only_missing=True)
+    n_new = sum(1 for p in property_summary if p.get("action") == "pretrained")
+    n_kept = sum(1 for p in property_summary if p.get("action") == "skipped_existing")
+    logger.info(f"Property models: {n_new} newly pretrained, {n_kept} preserved with online learning")
 
     # Step 3: Quality gate
     if not QUALITY_GATE_ENABLED:

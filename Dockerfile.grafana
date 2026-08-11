@@ -1,3 +1,11 @@
 FROM grafana/grafana:latest
-COPY monitoring/grafana/provisioning /etc/grafana/provisioning
-COPY monitoring/grafana/dashboards /var/lib/grafana/dashboards
+
+# Copy provisioning config and dashboards with correct ownership
+# (grafana image runs as user 472:0)
+COPY --chown=472:0 monitoring/grafana/provisioning /etc/grafana/provisioning
+COPY --chown=472:0 monitoring/grafana/dashboards /var/lib/grafana/dashboards
+
+# Allow anonymous access for POC (no login required)
+ENV GF_AUTH_ANONYMOUS_ENABLED=true
+ENV GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+ENV GF_SECURITY_ADMIN_PASSWORD=admin

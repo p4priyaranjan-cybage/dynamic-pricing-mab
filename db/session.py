@@ -24,13 +24,39 @@ def _database_url() -> str:
     return f"sqlite:///{_DEFAULT_SQLITE_PATH.as_posix()}"
 
 
+def _get_connect_args() -> dict:
+    """SQLite-specific connection args for concurrent access."""
+    if _database_url().startswith("sqlite"):
+        return {
+            "check_same_thread": False,
+            "timeout": 30,  # wait up to 30s for DB lock instead of failing instantly
+        }
+    return {}
+
+
 engine = create_engine(
     _database_url(),
-    connect_args={"check_same_thread": False} if _database_url().startswith("sqlite") else {},
+    connect_args=_get_connect_args(),
+    pool_pre_ping=True,
     future=True,
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _set_sqlite_pragmas(dbapi_conn, connection_record):
+    """Set SQLite pragmas for better concurrent performance."""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")      # allows readers during writes
+    cursor.execute("PRAGMA busy_timeout=30000")     # 30s retry on lock (ms)
+    cursor.execute("PRAGMA synchronous=NORMAL")     # faster writes, still safe with WAL
+    cursor.close()
+
+
+# Register the pragma listener for SQLite engines
+from sqlalchemy import event
+if _database_url().startswith("sqlite"):
+    event.listen(engine, "connect", _set_sqlite_pragmas)
 
 
 def get_session() -> Session:

@@ -339,12 +339,48 @@ properties beating baseline). This is flagged as an open tuning item (see
 
 ## 9. Two-stage reward design
 
-- **Proxy reward** (fast, same-day): booked / not-booked signal, drives the
-  PropertyModel's immediate online-learning loop via `record_feedback`.
-- **True reward** (delayed): booked AND not cancelled, net of channel
-  commission - computed by `feedback/reward_reconciliation.py` once the
-  stay date has passed, feeds the same `PropertyModel.learn` path with the
-  reconciled value, and is what the nightly backbone retrain uses.
+- **Proxy reward**: `1.0` if booked else `0.0` - a binary flag, not a dollar
+  amount (`context_generator/demand_model.py :: compute_rewards`).
+- **True reward** (delayed): `price * (1 - channel_commission)` if the booking
+  happened AND was not cancelled, otherwise `0.0`. Cancellation is a hard
+  zero, not a scaling factor. Commission: direct 0%, OTA 15%. Computed by
+  `feedback/reward_reconciliation.py` once the stay date has passed, and fed
+  to `PropertyModel.learn` for that one property.
+
+**Implementation status (audited against code).** Two defects were found in
+this area and have since been fixed; one caveat remains.
+
+- **FIXED - the backbone now learns from real outcomes.**
+  `offline_eval._query_historical_rows` filters `is_historical == True`, i.e.
+  the synthetic bootstrap dataset only, while live decisions are logged with
+  `is_historical=False`. Reconciled outcomes were therefore excluded from
+  training entirely. `offline_eval.query_reconciled_rows` +
+  `build_examples_from_reconciled_rows` now replay them - using the arm that
+  was actually played, its logged propensity, and the realized `true_reward` -
+  and `bootstrap_backbones` appends them to the oracle-imputed batch. Ground
+  truth is *added*, never substituted, so a fleet with no live feedback yet
+  trains exactly as before.
+
+- **FIXED - the nightly run no longer erases earned trust.**
+  `run_nightly.py` step 2 called `bootstrap_properties()`, which constructed a
+  fresh `PropertyModel(property_id)` and saved `n_observations = 0`. That
+  overwrote the online updates applied by step 1 of the same run and reset the
+  credibility weight `w = n / (n + k)` to zero every night, permanently
+  pinning every property to its backbone. Step 2 now passes
+  `only_missing=True`, so established properties are skipped and only
+  newly onboarded ones get pretrained. Relatedly, a failed quality gate no
+  longer rolls property models back - the gate evaluates backbones, and
+  reverting property artifacts would discard reconciled learning it never
+  tested.
+
+- **CAVEAT - there is still no same-day loop.**
+  `EnsemblePolicy.record_feedback` exists (`bandit_engine/policy.py`) but is
+  called only from `tests/test_confidence.py`, never from `serving/api.py`.
+  All learning is delayed until reconciliation. Consequently the proxy reward
+  is never used as a learning signal at all - its only consumer is
+  `offline_eval.py`, as the binary label for fitting the XGBoost reward model.
+
+Regression coverage: `tests/test_nightly_learning_preservation.py`.
 
 ## 10. API-first dashboard design
 

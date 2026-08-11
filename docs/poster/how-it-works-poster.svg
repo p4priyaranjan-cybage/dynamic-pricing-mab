@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="3400" viewBox="0 0 2000 3400">
+
+<defs>
+  <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%"  stop-color="#1e1b4b"/>
+    <stop offset="55%" stop-color="#4338ca"/>
+    <stop offset="100%" stop-color="#7c3aed"/>
+  </linearGradient>
+  <linearGradient id="gGreen" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#34d399"/>
+  </linearGradient>
+  <linearGradient id="gIndigo" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#8b5cf6"/>
+  </linearGradient>
+  <linearGradient id="gAmber" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#f59e0b"/>
+  </linearGradient>
+  <clipPath id="hdrClip"><rect x="0" y="0" width="2000" height="200"/></clipPath>
+  <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/>
+  </marker>
+  <marker id="arwB" markerWidth="11" markerHeight="11" refX="8" refY="3.5" orient="auto">
+    <path d="M0,0 L8,3.5 L0,7 z" fill="#6366f1"/>
+  </marker>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="150%">
+    <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.10"/>
+  </filter>
+
+  <style>
+    text { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+    .h1     { font-size:58px; font-weight:800; fill:#ffffff; }
+    .h1s    { font-size:25px; fill:#ffffff; opacity:.82; }
+    .h1t    { font-size:20px; fill:#ffffff; opacity:.62; letter-spacing:1.5px; }
+    .sTitle { font-size:32px; font-weight:800; fill:#312e81; }
+    .sTitleS{ font-size:28px; font-weight:800; fill:#312e81; }
+    .sDesc  { font-size:19px; fill:#64748b; }
+    .lbl    { font-size:22px; font-weight:700; fill:#0f172a; }
+    .lblS   { font-size:20px; font-weight:700; fill:#0f172a; }
+    .det    { font-size:16px; fill:#64748b; }
+    .bul    { font-size:18px; fill:#334155; }
+    .bulb   { font-weight:700; fill:#0f172a; }
+    .num    { font-size:26px; font-weight:800; fill:#ffffff; }
+    .numS   { font-size:20px; font-weight:800; fill:#ffffff; }
+    .tag    { font-size:14px; font-weight:800; fill:#ffffff; letter-spacing:1.2px; }
+    .kicker { font-size:18px; font-weight:800; fill:#64748b; letter-spacing:2px; }
+    .mono   { font-family:"Consolas","Courier New",monospace; }
+    .card   { fill:#ffffff; stroke:#e2e8f0; stroke-width:2; }
+    .pctTop { font-size:20px; font-weight:800; fill:#0f172a; }
+    .armL   { font-size:16px; fill:#475569; font-weight:600; }
+    .foot   { font-size:19px; fill:#ffffff; opacity:.7; }
+  </style>
+</defs>
+
+<rect width="2000" height="3400" fill="#f1f5f9"/>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<g clip-path="url(#hdrClip)">
+  <rect x="0" y="0" width="2000" height="200" fill="url(#hdr)"/>
+  <circle cx="1760" cy="30" r="185" fill="#ffffff" opacity="0.055"/>
+  <circle cx="1520" cy="210" r="130" fill="#ffffff" opacity="0.04"/>
+  <circle cx="1930" cy="185" r="90"  fill="#ffffff" opacity="0.05"/>
+</g>
+<text class="h1"  x="60" y="82">Dynamic Pricing with Multi-Armed Bandits</text>
+<text class="h1s" x="60" y="128">How the AI engine learns optimal hotel rates &#8212; architecture, feedback, and validation</text>
+<text class="h1t" x="60" y="168">9 PRICE ARMS &#183; 20+ CONTEXT SIGNALS &#183; 2-TIER MODEL &#183; NIGHTLY QUALITY GATE</text>
+
+<!-- ══════════════════ 1 · SCORING PIPELINE ══════════════════ -->
+<rect class="card" x="60" y="225" width="1880" height="300" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="274">1 &#183; Scoring Pipeline</text>
+<text class="sDesc"  x="100" y="304">Every pricing decision flows through these six stages in roughly 50 milliseconds.</text>
+
+<!-- step 1 -->
+<rect x="100" y="340" width="260" height="140" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+<circle cx="230" cy="382" r="27" fill="#3b82f6"/><text class="num" x="230" y="392" text-anchor="middle">1</text>
+<text class="lbl" x="230" y="434" text-anchor="middle">Request</text>
+<text class="det" x="230" y="460" text-anchor="middle">Property &#183; Room &#183; Date</text>
+<!-- step 2 -->
+<rect x="408" y="340" width="260" height="140" rx="12" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="2"/>
+<circle cx="538" cy="382" r="27" fill="#10b981"/><text class="num" x="538" y="392" text-anchor="middle">2</text>
+<text class="lbl" x="538" y="434" text-anchor="middle">Context</text>
+<text class="det" x="538" y="460" text-anchor="middle">20+ market signals</text>
+<!-- step 3 -->
+<rect x="716" y="340" width="260" height="140" rx="12" fill="#fffbeb" stroke="#fde68a" stroke-width="2"/>
+<circle cx="846" cy="382" r="27" fill="#f59e0b"/><text class="num" x="846" y="392" text-anchor="middle">3</text>
+<text class="lbl" x="846" y="434" text-anchor="middle">Guardrails</text>
+<text class="det" x="846" y="460" text-anchor="middle">Mask infeasible arms</text>
+<!-- step 4 -->
+<rect x="1024" y="340" width="260" height="140" rx="12" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="2"/>
+<circle cx="1154" cy="382" r="27" fill="#8b5cf6"/><text class="num" x="1154" y="392" text-anchor="middle">4</text>
+<text class="lbl" x="1154" y="434" text-anchor="middle">Ensemble</text>
+<text class="det" x="1154" y="460" text-anchor="middle">Backbone + Property</text>
+<!-- step 5 -->
+<rect x="1332" y="340" width="260" height="140" rx="12" fill="#fdf2f8" stroke="#fbcfe8" stroke-width="2"/>
+<circle cx="1462" cy="382" r="27" fill="#ec4899"/><text class="num" x="1462" y="392" text-anchor="middle">5</text>
+<text class="lbl" x="1462" y="434" text-anchor="middle">Decision</text>
+<text class="det" x="1462" y="460" text-anchor="middle">Arm + confidence</text>
+<!-- step 6 -->
+<rect x="1640" y="340" width="260" height="140" rx="12" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="2"/>
+<circle cx="1770" cy="382" r="27" fill="#059669"/><text class="num" x="1770" y="392" text-anchor="middle">6</text>
+<text class="lbl" x="1770" y="434" text-anchor="middle">Publish</text>
+<text class="det" x="1770" y="460" text-anchor="middle">Auto or approval queue</text>
+
+<line x1="368"  y1="410" x2="400"  y2="410" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="676"  y1="410" x2="708"  y2="410" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="984"  y1="410" x2="1016" y2="410" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="1292" y1="410" x2="1324" y2="410" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="1600" y1="410" x2="1632" y2="410" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+
+<!-- ══════════════════ 2 · TWO-TIER MODEL ══════════════════ -->
+<rect class="card" x="60" y="545" width="1880" height="470" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="594">2 &#183; Two-Tier Model Architecture</text>
+<text class="sDesc"  x="100" y="624">Solves cold-start for brand-new hotels while letting mature hotels specialise on their own data.</text>
+
+<!-- Backbone card -->
+<rect x="100" y="655" width="560" height="330" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2.5"/>
+<text class="lbl" x="130" y="700">Cluster Backbone</text>
+<rect x="380" y="681" width="250" height="26" rx="7" fill="#6366f1"/>
+<text class="tag" x="505" y="699" text-anchor="middle">SHARED WISDOM</text>
+<text class="bul" x="130" y="748"><tspan class="bulb">Scope</tspan>  1 model per (cluster &#215; tenant)</text>
+<text class="bul" x="130" y="782"><tspan class="bulb">Updates</tspan>  nightly batch retrain only</text>
+<text class="bul" x="130" y="816"><tspan class="bulb">Structure</tspan>  5-member VW bag ensemble</text>
+<text class="bul" x="130" y="850"><tspan class="bulb">Role</tspan>  cold-start prior &#38; stability</text>
+<text class="bul" x="130" y="884"><tspan class="bulb">Isolation</tspan>  chains never share weights</text>
+<circle cx="290" cy="925" r="13" fill="#6366f1" opacity=".85"/>
+<circle cx="330" cy="925" r="13" fill="#6d63f2" opacity=".85"/>
+<circle cx="370" cy="925" r="13" fill="#7c6bf4" opacity=".85"/>
+<circle cx="410" cy="925" r="13" fill="#8474f5" opacity=".85"/>
+<circle cx="450" cy="925" r="13" fill="#8b5cf6" opacity=".85"/>
+<text class="det" x="380" y="962" text-anchor="middle">5 independent workspaces &#8594; measures model agreement</text>
+
+<!-- Blend column -->
+<rect x="700" y="655" width="600" height="330" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+<text class="kicker" x="1000" y="700" text-anchor="middle">CREDIBILITY BLEND</text>
+<text class="mono" x="1000" y="754" text-anchor="middle" font-size="38" font-weight="800" fill="#0f172a">w = n / (n + k)</text>
+<text class="det" x="1000" y="786" text-anchor="middle">n = real booking outcomes &#183; k = smoothing constant (20)</text>
+<rect x="740" y="805" width="520" height="44" rx="8" fill="#e2e8f0"/>
+<path d="M740 805 h182 v44 h-182 a8 8 0 0 1 -8 -8 v-28 a8 8 0 0 1 8 -8 z" fill="url(#gGreen)"/>
+<path d="M922 805 h330 a8 8 0 0 1 8 8 v28 a8 8 0 0 1 -8 8 h-330 z" fill="url(#gIndigo)"/>
+<text x="831"  y="834" text-anchor="middle" font-size="17" font-weight="800" fill="#ffffff">Property 35%</text>
+<text x="1087" y="834" text-anchor="middle" font-size="17" font-weight="800" fill="#ffffff">Backbone 65%</text>
+<text class="det" x="1000" y="874" text-anchor="middle">Example shown: 10 observations, k = 20</text>
+<line x1="1000" y1="884" x2="1000" y2="906" stroke="#6366f1" stroke-width="3" marker-end="url(#arwB)"/>
+<rect x="820" y="912" width="360" height="54" rx="12" fill="url(#gAmber)"/>
+<text x="1000" y="946" text-anchor="middle" font-size="21" font-weight="800" fill="#78350f">Final Price Decision</text>
+
+<!-- Property card -->
+<rect x="1340" y="655" width="560" height="330" rx="14" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="2.5"/>
+<text class="lbl" x="1370" y="700">Property Model</text>
+<rect x="1590" y="681" width="280" height="26" rx="7" fill="#10b981"/>
+<text class="tag" x="1730" y="699" text-anchor="middle">INDIVIDUAL LEARNING</text>
+<text class="bul" x="1370" y="748"><tspan class="bulb">Scope</tspan>  1 model per property, isolated</text>
+<text class="bul" x="1370" y="782"><tspan class="bulb">Updates</tspan>  online, after each outcome</text>
+<text class="bul" x="1370" y="816"><tspan class="bulb">Structure</tspan>  single VW workspace</text>
+<text class="bul" x="1370" y="850"><tspan class="bulb">Role</tspan>  property-specific specialisation</text>
+<text class="bul" x="1370" y="884"><tspan class="bulb">Trust</tspan>  grows with every real observation</text>
+<rect x="1420" y="916" width="400" height="16" rx="8" fill="#d1fae5"/>
+<rect x="1420" y="916" width="140" height="16" rx="8" fill="url(#gGreen)"/>
+<text class="det" x="1620" y="962" text-anchor="middle">0% trust when new &#8594; 90%+ once mature</text>
+
+<!-- ══════════════════ 3 · CLUSTER &amp; TENANT ══════════════════ -->
+<rect class="card" x="60" y="1035" width="1880" height="460" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="1084">3 &#183; Cluster &#38; Tenant Isolation</text>
+<text class="sDesc"  x="100" y="1114">Competing chains share a market cluster &#8212; but never a single model weight or training row.</text>
+
+<rect x="100" y="1145" width="1800" height="280" rx="16" fill="#f8fafc" stroke="#a5b4fc" stroke-width="3" stroke-dasharray="12 8"/>
+<rect x="760" y="1126" width="480" height="40" rx="10" fill="#312e81"/>
+<text x="1000" y="1153" text-anchor="middle" font-size="19" font-weight="800" fill="#ffffff" letter-spacing="1px">CLUSTER: NYC MIDSCALE URBAN</text>
+
+<!-- Marriott column -->
+<rect x="140" y="1205" width="760" height="200" rx="12" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+<circle cx="175" cy="1240" r="11" fill="#3b82f6"/>
+<text class="lblS" x="198" y="1248">MARRIOTT</text>
+<rect x="170" y="1265" width="700" height="66" rx="10" fill="#ffffff" stroke="#dbeafe" stroke-width="2"/>
+<text class="det" x="520" y="1293" text-anchor="middle" font-size="17" fill="#334155" font-weight="700">Backbone weights &#8212; trained on Marriott data only</text>
+<rect x="420" y="1304" width="60" height="9" rx="5" fill="#3b82f6" opacity=".75"/>
+<rect x="490" y="1304" width="60" height="9" rx="5" fill="#3b82f6" opacity=".55"/>
+<rect x="560" y="1304" width="60" height="9" rx="5" fill="#3b82f6" opacity=".35"/>
+<rect x="170" y="1345" width="340" height="44" rx="9" fill="#ffffff" stroke="#dbeafe" stroke-width="2"/>
+<text class="det" x="340" y="1373" text-anchor="middle" font-size="17">Courtyard NYC #1</text>
+<rect x="530" y="1345" width="340" height="44" rx="9" fill="#ffffff" stroke="#dbeafe" stroke-width="2"/>
+<text class="det" x="700" y="1373" text-anchor="middle" font-size="17">Courtyard NYC #2</text>
+
+<!-- isolation wall -->
+<line x1="1000" y1="1212" x2="1000" y2="1398" stroke="#ef4444" stroke-width="3" stroke-dasharray="9 7"/>
+<g transform="translate(1000,1305) rotate(-90)">
+  <rect x="-96" y="-17" width="192" height="34" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+  <text x="0" y="6" text-anchor="middle" font-size="15" font-weight="800" fill="#b91c1c" letter-spacing="1.4px">ISOLATED</text>
+</g>
+
+<!-- Hyatt column -->
+<rect x="1100" y="1205" width="760" height="200" rx="12" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="2"/>
+<circle cx="1135" cy="1240" r="11" fill="#ec4899"/>
+<text class="lblS" x="1158" y="1248">HYATT</text>
+<rect x="1130" y="1265" width="700" height="66" rx="10" fill="#ffffff" stroke="#fce7f3" stroke-width="2"/>
+<text class="det" x="1480" y="1293" text-anchor="middle" font-size="17" fill="#334155" font-weight="700">Backbone weights &#8212; trained on Hyatt data only</text>
+<rect x="1380" y="1304" width="60" height="9" rx="5" fill="#ec4899" opacity=".75"/>
+<rect x="1450" y="1304" width="60" height="9" rx="5" fill="#ec4899" opacity=".55"/>
+<rect x="1520" y="1304" width="60" height="9" rx="5" fill="#ec4899" opacity=".35"/>
+<rect x="1130" y="1345" width="340" height="44" rx="9" fill="#ffffff" stroke="#fce7f3" stroke-width="2"/>
+<text class="det" x="1300" y="1373" text-anchor="middle" font-size="17">Hyatt Place NYC #1</text>
+<rect x="1490" y="1345" width="340" height="44" rx="9" fill="#ffffff" stroke="#fce7f3" stroke-width="2"/>
+<text class="det" x="1660" y="1373" text-anchor="middle" font-size="17">Hyatt Place NYC #2</text>
+
+<text x="1000" y="1464" text-anchor="middle" font-size="18" fill="#334155">
+  <tspan font-weight="800" fill="#059669">SHARED</tspan> cluster definition &#183; arm ladder &#183; context schema
+  <tspan font-weight="800" fill="#b91c1c">    NEVER SHARED</tspan> model weights &#183; training data &#183; guardrail overrides
+</text>
+
+<!-- ══════════════════ 4 · ARM LADDER ══════════════════ -->
+<rect class="card" x="60" y="1515" width="1880" height="480" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="1564">4 &#183; The Price Arm Ladder</text>
+<text class="sDesc"  x="100" y="1594">Nine discrete tiers. The bandit picks one; the price is the reference rate nudged by that offset.</text>
+
+<line x1="100" y1="1861" x2="1900" y2="1861" stroke="#cbd5e1" stroke-width="2"/>
+
+<rect x="100"  y="1800" width="120" height="60"  rx="8" fill="#1d4ed8"/>
+<text class="pctTop" x="160"  y="1786" text-anchor="middle">-22.5%</text>
+<text class="armL" x="160" y="1889" text-anchor="middle">Deep</text><text class="armL" x="160" y="1911" text-anchor="middle">Discount</text>
+
+<rect x="310"  y="1780" width="120" height="80"  rx="8" fill="#3b82f6"/>
+<text class="pctTop" x="370"  y="1766" text-anchor="middle">-15%</text>
+<text class="armL" x="370" y="1889" text-anchor="middle">Discount</text>
+
+<rect x="520"  y="1760" width="120" height="100" rx="8" fill="#93c5fd"/>
+<text class="pctTop" x="580"  y="1746" text-anchor="middle">-6.5%</text>
+<text class="armL" x="580" y="1889" text-anchor="middle">Slight</text><text class="armL" x="580" y="1911" text-anchor="middle">Discount</text>
+
+<rect x="730"  y="1740" width="120" height="120" rx="8" fill="#94a3b8"/>
+<text class="pctTop" x="790"  y="1726" text-anchor="middle">0%</text>
+<text class="armL" x="790" y="1889" text-anchor="middle">Base</text><text class="armL" x="790" y="1911" text-anchor="middle">Rate</text>
+
+<rect x="940"  y="1725" width="120" height="135" rx="8" fill="#6ee7b7"/>
+<text class="pctTop" x="1000" y="1711" text-anchor="middle">+6.5%</text>
+<text class="armL" x="1000" y="1889" text-anchor="middle">Slight</text><text class="armL" x="1000" y="1911" text-anchor="middle">Premium</text>
+
+<rect x="1150" y="1710" width="120" height="150" rx="8" fill="#10b981"/>
+<text class="pctTop" x="1210" y="1696" text-anchor="middle">+15%</text>
+<text class="armL" x="1210" y="1889" text-anchor="middle">Premium</text>
+
+<rect x="1360" y="1690" width="120" height="170" rx="8" fill="#f59e0b"/>
+<text class="pctTop" x="1420" y="1676" text-anchor="middle">+27.5%</text>
+<text class="armL" x="1420" y="1889" text-anchor="middle">High</text><text class="armL" x="1420" y="1911" text-anchor="middle">Premium</text>
+
+<rect x="1570" y="1670" width="120" height="190" rx="8" fill="#f97316"/>
+<text class="pctTop" x="1630" y="1656" text-anchor="middle">+45%</text>
+<text class="armL" x="1630" y="1889" text-anchor="middle">Demand</text><text class="armL" x="1630" y="1911" text-anchor="middle">Surge</text>
+
+<rect x="1780" y="1650" width="120" height="210" rx="8" fill="#dc2626"/>
+<text class="pctTop" x="1840" y="1636" text-anchor="middle">+62.5%</text>
+<text class="armL" x="1840" y="1889" text-anchor="middle">Peak</text><text class="armL" x="1840" y="1911" text-anchor="middle">Premium</text>
+
+<rect x="100" y="1932" width="1800" height="46" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>
+<text x="1000" y="1961" text-anchor="middle" font-size="19" fill="#334155">
+  <tspan font-weight="800" fill="#312e81">Price</tspan> = Reference Rate &#215; (1 + arm offset)
+  <tspan font-weight="800" fill="#312e81">      Reference Rate</tspan> = BAR &#215; Room &#215; Rate-Plan &#215; Length-of-Stay
+</text>
+
+<!-- ══════════════════ 5 · FEEDBACK LOOP ══════════════════ -->
+<rect class="card" x="60" y="2015" width="1880" height="330" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="2064">5 &#183; The Learning Feedback Loop</text>
+<text class="sDesc"  x="100" y="2094">Only prices a guest actually saw can teach the model. Rejected recommendations never train it.</text>
+
+<rect x="100"  y="2125" width="300" height="130" rx="12" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="2"/>
+<circle cx="250" cy="2162" r="24" fill="#6366f1"/><text class="numS" x="250" y="2170" text-anchor="middle">1</text>
+<text class="lblS" x="250" y="2212" text-anchor="middle">Bandit Scores</text>
+<text class="det"  x="250" y="2238" text-anchor="middle">Picks arm from context</text>
+
+<rect x="475"  y="2125" width="300" height="130" rx="12" fill="#fffbeb" stroke="#fde68a" stroke-width="2"/>
+<circle cx="625" cy="2162" r="24" fill="#f59e0b"/><text class="numS" x="625" y="2170" text-anchor="middle">2</text>
+<text class="lblS" x="625" y="2212" text-anchor="middle">RM Reviews</text>
+<text class="det"  x="625" y="2238" text-anchor="middle">Approve / reject / override</text>
+
+<rect x="850"  y="2125" width="300" height="130" rx="12" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="2"/>
+<circle cx="1000" cy="2162" r="24" fill="#10b981"/><text class="numS" x="1000" y="2170" text-anchor="middle">3</text>
+<text class="lblS" x="1000" y="2212" text-anchor="middle">Price Published</text>
+<text class="det"  x="1000" y="2238" text-anchor="middle">Guest sees the rate</text>
+
+<rect x="1225" y="2125" width="300" height="130" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+<circle cx="1375" cy="2162" r="24" fill="#3b82f6"/><text class="numS" x="1375" y="2170" text-anchor="middle">4</text>
+<text class="lblS" x="1375" y="2212" text-anchor="middle">Outcome Observed</text>
+<text class="det"  x="1375" y="2238" text-anchor="middle">Booked? Cancelled?</text>
+
+<rect x="1600" y="2125" width="300" height="130" rx="12" fill="#fdf4ff" stroke="#e9d5ff" stroke-width="2"/>
+<circle cx="1750" cy="2162" r="24" fill="#8b5cf6"/><text class="numS" x="1750" y="2170" text-anchor="middle">5</text>
+<text class="lblS" x="1750" y="2212" text-anchor="middle">Model Learns</text>
+<text class="det"  x="1750" y="2238" text-anchor="middle">Weights update on reward</text>
+
+<line x1="412"  y1="2190" x2="462"  y2="2190" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="787"  y1="2190" x2="837"  y2="2190" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="1162" y1="2190" x2="1212" y2="2190" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="1537" y1="2190" x2="1587" y2="2190" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+
+<path d="M1750 2255 C 1750 2312, 1100 2318, 260 2300" fill="none" stroke="#6366f1" stroke-width="3" stroke-dasharray="10 6" marker-end="url(#arwB)"/>
+<text x="1010" y="2336" text-anchor="middle" font-size="19" font-weight="700" fill="#4f46e5">Smarter decisions next time &#8212; confidence rises, fewer approvals needed</text>
+
+<!-- ══════════════════ 6a · CONTEXT SIGNALS ══════════════════ -->
+<rect class="card" x="60" y="2365" width="920" height="360" rx="16" filter="url(#soft)"/>
+<text class="sTitleS" x="100" y="2412">6 &#183; Context Signals</text>
+<text class="sDesc"    x="100" y="2440">What the model sees before every single decision.</text>
+
+<rect x="100" y="2460" width="840" height="42" rx="9" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+<circle cx="124" cy="2481" r="7" fill="#10b981"/>
+<text x="142" y="2487" font-size="17" fill="#334155"><tspan font-weight="800" fill="#065f46">DEMAND</tspan>  occupancy &#183; ADR trend &#183; pace vs STLY &#183; pickup 7d &#183; inventory</text>
+
+<rect x="100" y="2510" width="840" height="42" rx="9" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<circle cx="124" cy="2531" r="7" fill="#3b82f6"/>
+<text x="142" y="2537" font-size="17" fill="#334155"><tspan font-weight="800" fill="#1e40af">COMP-SET</tspan>  avg rate &#183; our index &#183; rate trend &#183; rank &#183; dispersion</text>
+
+<rect x="100" y="2560" width="840" height="42" rx="9" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+<circle cx="124" cy="2581" r="7" fill="#ef4444"/>
+<text x="142" y="2587" font-size="17" fill="#334155"><tspan font-weight="800" fill="#991b1b">EVENTS</tspan>  event flag &#183; intensity 0&#8211;1 (local concert &#8594; Super Bowl)</text>
+
+<rect x="100" y="2610" width="840" height="42" rx="9" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+<circle cx="124" cy="2631" r="7" fill="#f59e0b"/>
+<text x="142" y="2637" font-size="17" fill="#334155"><tspan font-weight="800" fill="#92400e">SEGMENT</tspan>  guest segment &#183; room type &#183; rate plan &#183; length of stay</text>
+
+<rect x="100" y="2660" width="840" height="42" rx="9" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+<circle cx="124" cy="2681" r="7" fill="#8b5cf6"/>
+<text x="142" y="2687" font-size="17" fill="#334155"><tspan font-weight="800" fill="#5b21b6">CALENDAR</tspan>  day of week &#183; lead time to arrival</text>
+
+<!-- ══════════════════ 6b · CONFIDENCE SCORE ══════════════════ -->
+<rect class="card" x="1020" y="2365" width="920" height="360" rx="16" filter="url(#soft)"/>
+<text class="sTitleS" x="1060" y="2412">7 &#183; Confidence Score</text>
+<text class="sDesc"    x="1060" y="2440">Three signals decide whether a price auto-publishes or waits for a human.</text>
+
+<text x="1060" y="2486" font-size="17" fill="#334155"><tspan font-weight="700">Sample size</tspan> &#8212; how much real data does this hotel have?</text>
+<rect x="1560" y="2472" width="270" height="18" rx="9" fill="#e2e8f0"/>
+<rect x="1560" y="2472" width="108" height="18" rx="9" fill="url(#gGreen)"/>
+<text x="1900" y="2487" text-anchor="end" font-size="17" font-weight="800" fill="#059669">40%</text>
+
+<text x="1060" y="2538" font-size="17" fill="#334155"><tspan font-weight="700">Bag agreement</tspan> &#8212; do the 5 members concur?</text>
+<rect x="1560" y="2524" width="270" height="18" rx="9" fill="#e2e8f0"/>
+<rect x="1560" y="2524" width="95" height="18" rx="9" fill="url(#gIndigo)"/>
+<text x="1900" y="2539" text-anchor="end" font-size="17" font-weight="800" fill="#4f46e5">35%</text>
+
+<text x="1060" y="2590" font-size="17" fill="#334155"><tspan font-weight="700">Decision margin</tspan> &#8212; is the winner clearly ahead?</text>
+<rect x="1560" y="2576" width="270" height="18" rx="9" fill="#e2e8f0"/>
+<rect x="1560" y="2576" width="68" height="18" rx="9" fill="url(#gAmber)"/>
+<text x="1900" y="2591" text-anchor="end" font-size="17" font-weight="800" fill="#d97706">25%</text>
+
+<line x1="1060" y1="2620" x2="1900" y2="2620" stroke="#e2e8f0" stroke-width="2"/>
+<text x="1060" y="2650" font-size="16" font-weight="800" fill="#64748b" letter-spacing="1.4px">RESULTING ACTION</text>
+
+<rect x="1060" y="2662" width="266" height="44" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+<text x="1193" y="2690" text-anchor="middle" font-size="16" font-weight="800" fill="#065f46">&#62; 0.70  auto-publish</text>
+
+<rect x="1347" y="2662" width="266" height="44" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+<text x="1480" y="2690" text-anchor="middle" font-size="16" font-weight="800" fill="#92400e">0.40&#8211;0.70  if small &#916;</text>
+
+<rect x="1634" y="2662" width="266" height="44" rx="10" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+<text x="1767" y="2690" text-anchor="middle" font-size="16" font-weight="800" fill="#991b1b">&#60; 0.40  RM approval</text>
+
+<!-- ══════════════════ 8 · TRAINING, EVALUATION &amp; TESTING ══════════════════ -->
+<rect class="card" x="60" y="2745" width="1880" height="565" rx="16" filter="url(#soft)"/>
+<text class="sTitle" x="100" y="2794">8 &#183; Training, Evaluation &#38; Testing Strategy</text>
+<text class="sDesc"  x="100" y="2824">Three training rhythms, one automated quality gate. The model can never ship worse than yesterday.</text>
+
+<!-- three training phases -->
+<rect x="100" y="2852" width="580" height="172" rx="12" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2"/>
+<circle cx="136" cy="2886" r="19" fill="#6366f1"/><text class="numS" x="136" y="2893" text-anchor="middle">1</text>
+<text class="lblS" x="166" y="2893">Bootstrap &#8212; one-time</text>
+<text class="det" x="130" y="2929" font-size="16">Import history &#8594; fit reward model &#8594;</text>
+<text class="det" x="130" y="2953" font-size="16">pretrain every backbone and property model.</text>
+<text class="det" x="130" y="2985" font-size="16" fill="#4f46e5" font-weight="700">Pretraining does not count as earned trust,</text>
+<text class="det" x="130" y="3007" font-size="16" fill="#4f46e5" font-weight="700">so new hotels still lean on the cluster.</text>
+
+<rect x="710" y="2852" width="580" height="172" rx="12" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="2"/>
+<circle cx="746" cy="2886" r="19" fill="#10b981"/><text class="numS" x="746" y="2893" text-anchor="middle">2</text>
+<text class="lblS" x="776" y="2893">Nightly retrain &#8212; batch</text>
+<text class="det" x="740" y="2929" font-size="16">Reconcile matured stays &#8594; full re-fit of all</text>
+<text class="det" x="740" y="2953" font-size="16">backbones and property models.</text>
+<text class="det" x="740" y="2985" font-size="16" fill="#047857" font-weight="700">Every new artifact is version-stamped, so any</text>
+<text class="det" x="740" y="3007" font-size="16" fill="#047857" font-weight="700">promotion is reversible in one file write.</text>
+
+<rect x="1320" y="2852" width="580" height="172" rx="12" fill="#fdf4ff" stroke="#e9d5ff" stroke-width="2"/>
+<circle cx="1356" cy="2886" r="19" fill="#8b5cf6"/><text class="numS" x="1356" y="2893" text-anchor="middle">3</text>
+<text class="lblS" x="1386" y="2893">Online &#8212; continuous</text>
+<text class="det" x="1350" y="2929" font-size="16">Each reconciled booking instantly updates that</text>
+<text class="det" x="1350" y="2953" font-size="16">one property&#8217;s model and its trust weight.</text>
+<text class="det" x="1350" y="2985" font-size="16" fill="#6d28d9" font-weight="700">Rejected and simulated decisions are excluded</text>
+<text class="det" x="1350" y="3007" font-size="16" fill="#6d28d9" font-weight="700">&#8212; the model never learns from unseen prices.</text>
+
+<!-- quality gate -->
+<text x="100" y="3072" font-size="18" font-weight="800" fill="#64748b" letter-spacing="2px">NIGHTLY QUALITY GATE</text>
+
+<rect x="100" y="3086" width="380" height="104" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+<text class="lblS" x="290" y="3124" text-anchor="middle">Retrain</text>
+<text class="det"  x="290" y="3152" text-anchor="middle" font-size="16">New versioned artifacts</text>
+<text class="det"  x="290" y="3174" text-anchor="middle" font-size="16">written, not yet trusted</text>
+
+<rect x="540" y="3086" width="380" height="104" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+<text class="lblS" x="730" y="3124" text-anchor="middle">Backtest Suite</text>
+<text class="det"  x="730" y="3152" text-anchor="middle" font-size="16">New policy vs static Base-Rate</text>
+<text class="det"  x="730" y="3174" text-anchor="middle" font-size="16">baseline, scored by the oracle</text>
+
+<rect x="980" y="3086" width="380" height="104" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+<text class="lblS" x="1170" y="3124" text-anchor="middle">Bootstrap 95% CI</text>
+<text class="det"  x="1170" y="3152" text-anchor="middle" font-size="16">Is the lower bound of the</text>
+<text class="det"  x="1170" y="3174" text-anchor="middle" font-size="16">reward difference above zero?</text>
+
+<line x1="492"  y1="3138" x2="528"  y2="3138" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="932"  y1="3138" x2="968"  y2="3138" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+<line x1="1372" y1="3138" x2="1408" y2="3138" stroke="#94a3b8" stroke-width="3" marker-end="url(#arw)"/>
+
+<rect x="1420" y="3086" width="480" height="48" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2.5"/>
+<text x="1660" y="3117" text-anchor="middle" font-size="18" font-weight="800" fill="#065f46">CI &#62; 0  &#8594;  PROMOTE new version</text>
+
+<rect x="1420" y="3142" width="480" height="48" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2.5"/>
+<text x="1660" y="3173" text-anchor="middle" font-size="18" font-weight="800" fill="#991b1b">CI &#8804; 0  &#8594;  ROLLBACK everything</text>
+
+<!-- testing layers -->
+<rect x="100" y="3218" width="435" height="72" rx="11" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+<text x="120" y="3244" font-size="16" font-weight="800" fill="#1e40af">UNIT TESTS</text>
+<text x="120" y="3266" font-size="15" fill="#334155">confidence &#183; config loader &#183; guardrails</text>
+<text x="120" y="3284" font-size="15" fill="#334155">reward model &#183; reference-rate maths</text>
+
+<rect x="555" y="3218" width="435" height="72" rx="11" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="2"/>
+<text x="575" y="3244" font-size="16" font-weight="800" fill="#065f46">INTEGRATION TESTS</text>
+<text x="575" y="3266" font-size="15" fill="#334155">API contracts &#183; reward reconciliation</text>
+<text x="575" y="3284" font-size="15" fill="#334155">full bootstrap &#8594; score &#8594; retrain cycle</text>
+
+<rect x="1010" y="3218" width="435" height="72" rx="11" fill="#fffbeb" stroke="#fde68a" stroke-width="2"/>
+<text x="1030" y="3244" font-size="16" font-weight="800" fill="#92400e">REGRESSION GUARD</text>
+<text x="1030" y="3266" font-size="15" fill="#334155">the nightly backtest doubles as an</text>
+<text x="1030" y="3284" font-size="15" fill="#334155">automated regression test on every build</text>
+
+<rect x="1465" y="3218" width="435" height="72" rx="11" fill="#fdf4ff" stroke="#e9d5ff" stroke-width="2"/>
+<text x="1485" y="3244" font-size="16" font-weight="800" fill="#5b21b6">SAFETY NETS</text>
+<text x="1485" y="3266" font-size="15" fill="#334155">shadow mode &#183; baseline kill-switch</text>
+<text x="1485" y="3284" font-size="15" fill="#334155">version rollback &#183; approval routing</text>
+
+<!-- ══════════════════ FOOTER ══════════════════ -->
+<rect x="0" y="3330" width="2000" height="70" fill="#1e1b4b"/>
+<text class="foot" x="60" y="3373">Dynamic Pricing MAB &#8212; Vowpal Wabbit contextual bandit &#183; XGBoost reward model &#183; FastAPI &#183; Prometheus + Grafana</text>
+<text class="foot" x="1940" y="3373" text-anchor="end">Vector poster &#8212; scales to any print size</text>
+
+</svg>

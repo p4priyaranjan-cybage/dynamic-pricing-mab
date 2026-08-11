@@ -19,8 +19,10 @@ The system has three distinct training phases, each with different data sources,
 │  PHASE 2: NIGHTLY RETRAIN (scheduled, batch)                                 │
 │  ═══════════════════════════════════════════                                  │
 │  Trigger: Cron/scheduler (daily)                                             │
-│  Data:    Reconciled real decisions + original historical data                │
-│  Models:  ALL backbones + ALL property models (with quality gate)             │
+│  Data:    is_historical=True bootstrap rows + reconciled live outcomes       │
+│           (is_historical=False AND reconciled_at IS NOT NULL)                │
+│  Models:  ALL backbones. Property models: only ones with no artifact yet     │
+│           (established ones keep their online-learned weights)               │
 │  Script:  python -m orchestration.pipelines.run_nightly                      │
 │                                                                              │
 │  PHASE 3: ONLINE LEARNING (continuous, per-decision)                         │
@@ -32,6 +34,53 @@ The system has three distinct training phases, each with different data sources,
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Audit note: two defects found here, both now fixed
+
+An audit of these phases against the code found two material defects. Both are
+fixed; this note records what they were and how the fix works, because the
+symptoms were silent.
+
+**1. The nightly retrain did not learn from real outcomes.**
+`offline_eval._query_historical_rows` filters `Decision.is_historical == True`,
+i.e. the synthetic bootstrap dataset. Live decisions are logged with
+`is_historical=False` (`decision_logger.py`), so every reconciled real-world
+outcome was excluded from training. Combined with a deterministic oracle and
+deterministic bagging seeds (`random.Random(f"{tenant_id}:{cluster_id}")`), the
+nightly retrain reproduced substantially the same model every night.
+
+*Fix:* `query_reconciled_rows()` selects live rows with
+`reconciled_at IS NOT NULL`, and `build_examples_from_reconciled_rows()` turns
+them into VW examples from ground truth only - the arm actually played, its
+logged propensity (floored at `MIN_LOGGED_PROPENSITY` to bound the `1/p`
+importance weight), and the realized `true_reward`. `bootstrap_backbones()`
+appends these to the oracle batch. Additive, so a fleet with no live feedback
+behaves exactly as before.
+
+**2. Phase 2 erased Phase 3.**
+`run_nightly.py` step 2 called `bootstrap_properties()`, which built a fresh
+`PropertyModel(property_id)` and saved `n_observations = 0` - overwriting the
+online updates step 1 had applied minutes earlier. The credibility weight
+`w = n / (n + k)` reset to zero nightly, so no property ever graduated to
+self-reliance and the two-tier blend stayed pinned to the backbone. Rollback
+could not recover it either, since every prior nightly version had also saved
+zero.
+
+*Fix:* `bootstrap_properties(..., only_missing=True)` in the nightly path.
+Properties with an existing artifact are skipped (`property_model_exists()`);
+newly onboarded ones are still pretrained rather than left blank. Separately,
+a failed quality gate no longer rolls property models back - the gate tests
+backbones, so reverting property artifacts destroyed learning it never
+evaluated.
+
+**Remaining caveat.** There is still no same-day online loop.
+`EnsemblePolicy.record_feedback` exists but is called only from
+`tests/test_confidence.py`. All learning waits for reconciliation, so the proxy
+reward is never a learning signal - only the XGBoost label.
+
+Regression coverage: `tests/test_nightly_learning_preservation.py` (14 tests).
 
 ---
 
@@ -96,7 +145,9 @@ Instead, only **real reconciled decisions** (Phase 3) increment `n_observations`
 ## Phase 2: Nightly Retrain
 
 ### Purpose
-Incorporate fresh real-world feedback into all models, with a quality gate to prevent regressions.
+Fold fresh real-world feedback into the backbone models, with a quality gate
+to prevent regressions, while leaving each property's own online-learned
+weights intact.
 
 ### Pipeline Flow
 
@@ -108,15 +159,19 @@ orchestration/pipelines/run_nightly.py
 │       ├── Find decisions where stay_date <= today AND reconciled_at IS NULL
 │       ├── Filter: only "approved" or "auto_published" (never rejected/pending)
 │       ├── Simulate realized outcome (booked? cancelled? channel?)
-│       ├── Compute true_reward = price * booked * (1-cancel) * (1-commission)
+│       ├── Compute true_reward = price * (1-commission) if booked AND not
+│       │     cancelled, else 0.0  (cancellation is a hard zero)
 │       ├── Feed PropertyModel.learn() (online update, increments n_observations)
 │       └── Save property models
 │
 ├── Step 2: RETRAIN
-│   ├── bootstrap_backbones() - full re-fit from all available data
+│   ├── bootstrap_backbones() - oracle examples from historical rows
+│   │   │   PLUS reconciled real outcomes (query_reconciled_rows)
 │   │   └── Creates NEW versioned artifacts (old versions preserved)
-│   └── bootstrap_properties() - full re-fit of all property models
-│       └── Same process as initial bootstrap, but with more data now
+│   └── bootstrap_properties(only_missing=True)
+│       ├── Established properties: SKIPPED, keeping the weights and
+│       │     n_observations that Step 1 just earned
+│       └── Newly onboarded properties: pretrained so they aren't blank
 │
 └── Step 3: QUALITY GATE
     ├── Sample 6 properties for backtest (fixed seed for reproducibility)

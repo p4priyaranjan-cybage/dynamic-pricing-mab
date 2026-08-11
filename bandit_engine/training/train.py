@@ -19,17 +19,21 @@ from __future__ import annotations
 import json
 
 from bandit_engine.config_loader import resolve_arm_ladder_for_cluster
-from bandit_engine.policy import BackboneModel, PropertyModel
+from bandit_engine.policy import MODEL_DIR, BackboneModel, PropertyModel
+from model_registry.versioning import get_current_version_dir
 from bandit_engine.training.offline_eval import (
     build_augmented_training_examples_from_rows,
+    build_examples_from_reconciled_rows,
     get_reward_model_for_group,
     query_historical_rows,
+    query_reconciled_rows,
 )
 from db.models import Property
 from db.session import get_session
 
 BACKBONE_HISTORY_CAP = 8000  # historical rows sampled per (cluster,tenant) before x9-arm expansion
 PROPERTY_HISTORY_CAP = 1500  # historical rows sampled per property before x9-arm expansion
+BACKBONE_RECONCILED_CAP = 4000  # reconciled REAL outcomes replayed per (cluster,tenant)
 
 
 def bootstrap_backbones() -> tuple[list[dict], dict]:
@@ -52,6 +56,18 @@ def bootstrap_backbones() -> tuple[list[dict], dict]:
         )
         reward_model_cache[(cluster_id, tenant_id)] = (reward_model, ladder)
         examples = build_augmented_training_examples_from_rows(rows, ladder, reward_model)
+
+        # Replay reconciled REAL outcomes alongside the oracle-imputed
+        # examples. Without this the backbone re-fits the same static
+        # bootstrap dataset every night and never learns from live bookings.
+        # Ground truth is appended, never substituted, so a fleet with no
+        # live feedback yet trains exactly as it did before.
+        reconciled_rows = query_reconciled_rows(
+            cluster_id=cluster_id, tenant_id=tenant_id, cap=BACKBONE_RECONCILED_CAP
+        )
+        reconciled_examples = build_examples_from_reconciled_rows(reconciled_rows, ladder)
+        examples = examples + reconciled_examples
+
         backbone = BackboneModel(cluster_id, tenant_id)
         backbone.learn_batch(examples)
         backbone.save()
@@ -60,7 +76,9 @@ def bootstrap_backbones() -> tuple[list[dict], dict]:
                 "cluster_id": cluster_id,
                 "tenant_id": tenant_id,
                 "n_historical_rows": len(rows),
+                "n_reconciled_rows": len(reconciled_rows),
                 "n_examples": len(examples),
+                "n_reconciled_examples": len(reconciled_examples),
                 "reward_model_auc": round(reward_model.auc, 4) if reward_model and reward_model.auc is not None else None,
                 "reward_model_reliable": reward_model.reliable if reward_model else False,
             }
@@ -68,7 +86,31 @@ def bootstrap_backbones() -> tuple[list[dict], dict]:
     return summary, reward_model_cache
 
 
-def bootstrap_properties(reward_model_cache: dict | None = None) -> list[dict]:
+def property_model_exists(property_id: str) -> bool:
+    """True if this property already has a saved model artifact.
+
+    Used by `bootstrap_properties(only_missing=True)` so the nightly pipeline
+    can pretrain freshly-onboarded properties WITHOUT clobbering the
+    online-learned weights of established ones.
+    """
+    return get_current_version_dir(MODEL_DIR / "property" / property_id) is not None
+
+
+def bootstrap_properties(reward_model_cache: dict | None = None,
+                          only_missing: bool = False) -> list[dict]:
+    """Pretrain PropertyModels from the synthetic historical dataset.
+
+    `only_missing=False` (default, used by the one-time bootstrap) rebuilds
+    every property model from scratch.
+
+    `only_missing=True` (used by the nightly pipeline) skips any property that
+    already has a saved artifact. This matters: a fresh `PropertyModel(...)`
+    starts at `n_observations = 0`, and saving it would reset the ensemble
+    credibility weight `w = n / (n + k)` to zero - discarding the online
+    learning applied by feedback/reward_reconciliation.py and permanently
+    pinning the property to its backbone. Newly onboarded properties still get
+    pretrained rather than being left as blank slates.
+    """
     session = get_session()
     try:
         properties = session.query(Property).all()
@@ -79,6 +121,14 @@ def bootstrap_properties(reward_model_cache: dict | None = None) -> list[dict]:
     reward_model_cache = reward_model_cache or {}
     summary = []
     for property_id, cluster_id, tenant_id in prop_list:
+        if only_missing and property_model_exists(property_id):
+            summary.append({
+                "property_id": property_id,
+                "action": "skipped_existing",
+                "reason": "preserved online-learned weights and n_observations",
+            })
+            continue
+
         key = (cluster_id, tenant_id)
         if key in reward_model_cache:
             reward_model, ladder = reward_model_cache[key]
@@ -103,7 +153,12 @@ def bootstrap_properties(reward_model_cache: dict | None = None) -> list[dict]:
                 count_as_observation=False,
             )
         model.save()
-        summary.append({"property_id": property_id, "n_historical_rows": len(prop_rows), "n_examples": len(examples)})
+        summary.append({
+            "property_id": property_id,
+            "action": "pretrained",
+            "n_historical_rows": len(prop_rows),
+            "n_examples": len(examples),
+        })
     return summary
 
 

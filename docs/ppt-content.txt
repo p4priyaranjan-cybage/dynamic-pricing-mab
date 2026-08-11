@@ -1,0 +1,202 @@
+================================================================================
+DYNAMIC PRICING - MULTI-ARMED BANDIT (MAB) SYSTEM
+PPT Slide Content
+================================================================================
+
+
+================================================================================
+SLIDE 1: IMPLEMENTATION STRATEGY — Multi-Armed Bandit Approach
+================================================================================
+
+Title: "Why Multi-Armed Bandit?"
+
+Bullets:
+
+• Treat pricing as a LEARNING problem, not a rules-based one
+  — The system explores price options, observes outcomes, and gets smarter every day
+
+• 9 discrete price "arms" ranging from -22.5% (deep discount) to +62.5% (peak premium)
+  — Applied as offsets on a computed Reference Rate, not absolute prices
+  — Fine-grained tiers near center (where most volume lives), wider tails for extreme conditions
+
+• Contextual Bandit (not blind exploration)
+  — Every decision uses 20+ real-time market signals to CHOOSE which arm to pull
+  — "High occupancy + event + strong pace → lean toward premium"
+  — "Low demand + behind budget → lean toward discount"
+
+• Two-tier ensemble architecture solves cold-start AND personalization:
+  — Cluster Backbone: shared wisdom for similar hotels (fast start for new properties)
+  — Property Model: individual hotel's learned preferences (specialization over time)
+  — Credibility-weighted blend: new hotels trust the cluster, mature hotels trust themselves
+
+• Explore vs. Exploit — built-in
+  — System automatically balances trying new prices (learning) with exploiting known-good ones (earning)
+  — No manual tuning of exploration rate — handled by VW's CB_ADF algorithm
+
+• Human-in-the-loop safety net
+  — Low confidence or large price swings automatically route to Revenue Manager approval
+  — Rejected recommendations never enter training → model can't reinforce bad suggestions
+  — One-click kill-switch: revert any property/tenant to static baseline pricing instantly
+
+
+================================================================================
+SLIDE 2: DATA POINTS USED
+================================================================================
+
+Title: "What the Model Sees Before Every Decision"
+
+Bullets:
+
+DEMAND & OPERATIONAL SIGNALS
+• Occupancy % (current on-the-books for the stay date)
+• ADR trend % (average daily rate momentum vs. trailing baseline)
+• Booking pace vs. same-time-last-year %
+• Pickup: rooms booked in the trailing 7 days for this stay date
+• Remaining sellable inventory %
+
+COMPETITIVE INTELLIGENCE
+• Comp-set average rate (5-8 competitor hotels)
+• Our rate vs. comp-set index (are we priced above or below market?)
+• Comp-set rate trend % (7/14-day momentum — is market moving up or down?)
+• Comp-set rank (our position: 1 = most expensive)
+• Comp-set dispersion (how spread out are competitor prices?)
+
+LOCAL DEMAND / EVENTS
+• Event flag (is there a local demand event — conference, concert, sports?)
+• Event intensity (0–1 scaled — small local vs. Super Bowl)
+
+SEGMENTATION & PRODUCT
+• Guest segment: Transient / Corporate / Group / Leisure
+• Room type: Standard / Deluxe / Suite
+• Rate plan: BAR / Government / Senior / Special Offer
+• Length-of-stay bucket: 1 / 2 / 3-5 / 6-8 / 9+ nights
+
+CALENDAR & TIMING
+• Day of week (Mon–Sun)
+• Lead time (days between decision date and stay date)
+
+IDENTITY (for routing, not as a raw feature)
+• Property ID → routes to correct property model
+• Cluster ID → routes to correct backbone model
+• Tenant ID → applies correct guardrails and business rules
+
+
+================================================================================
+SLIDE 3: ML MODEL TRAINING & TESTING STRATEGY
+================================================================================
+
+Title: "Train Smart, Deploy Safe, Learn Continuously"
+
+Bullets:
+
+THREE TRAINING PHASES:
+
+1. BOOTSTRAP (one-time, at onboarding)
+   • Generate/import historical data → fit reward models → pre-train all VW models
+   • New properties start with cluster knowledge, not random noise
+   • Bootstrap does NOT count as "earned trust" — property still defers to backbone
+
+2. NIGHTLY RETRAIN (scheduled, batch)
+   • Reconciles every stay whose date has passed, then re-fits the backbones
+   • Backbone learns from the bootstrap dataset PLUS real reconciled outcomes
+     (the arm actually played, its propensity, and the revenue it produced)
+   • Property models keep their own online-learned weights — never rebuilt,
+     so each hotel's earned trust accumulates instead of resetting
+   • Multi-pass training (3x) for VW convergence with diverse contexts
+   • Every artifact is version-stamped, so promotion is reversible
+
+3. ONLINE LEARNING (continuous, per-decision)
+   • Each reconciled booking outcome updates the property model immediately
+   • Single-decision granularity: fast adaptation to market shifts
+   • Only real outcomes count (simulations and rejections are excluded)
+
+TESTING & QUALITY GATE:
+
+• Automated backtest suite runs EVERY night after retrain
+  — Tests trained policy vs. "always charge Base Rate" on sampled properties
+  — Uses an independent oracle demand model (never seen by the bandit)
+  — Bootstrap confidence interval: CI_low > 0 → model reliably beats baseline
+
+• PROMOTE or ROLLBACK — never deploy a regression
+  — If quality gate passes: new model goes live
+  — If it fails: ALL models auto-rollback to previous known-good version
+  — System CANNOT get worse than yesterday's model
+
+• Model versioning with instant rollback
+  — Timestamped artifact directories, "current" pointer file
+  — Rollback = one file write (no retraining needed)
+  — Keeps last 5 versions for forensic analysis
+
+REWARD MODEL (training signal generator):
+• XGBoost classifier: P(booked) ~ context + price offset
+• Monotonic constraint: higher price can NEVER increase booking probability (law of demand)
+• Segment-aware elasticity: leisure guests are more price-sensitive than corporate
+• Held-out AUC/log-loss diagnostics flag unreliable fits before they corrupt training
+
+
+================================================================================
+SLIDE 4: TECH STACK
+================================================================================
+
+Title: "Production-Ready, Lightweight, Scalable"
+
+Bullets:
+
+CORE ML ENGINE
+• Vowpal Wabbit (CB_ADF) — contextual bandit with action-dependent features
+  — Sub-millisecond inference, ~50KB per model file
+  — Online learning native — no full retrain needed for incremental updates
+• XGBoost — reward model for offline evaluation and training signal generation
+  — Monotonic constraints enforce economic priors structurally
+
+SERVING & API
+• FastAPI + Uvicorn — async Python, auto-generated OpenAPI docs
+  — Serves both REST API and static HTML/JS dashboard from a single process
+• Pydantic v2 — request/response validation with zero boilerplate
+• Server-Sent Events (SSE) — real-time price updates pushed to dashboard
+
+DATA & STORAGE
+• SQLite (POC) → PostgreSQL (production) — zero-config swap via SQLAlchemy
+• YAML config with deep-merge inheritance — business rules as config, not code
+  — Tenant > Brand > Region > Property override chain
+
+FRONTEND
+• HTML5 + Bootstrap 5 + Vanilla JS — no build step, no node_modules
+  — 8 pages: Rate Calendar, Approval Queue, Monitoring, Recommendations,
+    Scenario Simulator, Model Health, Properties, OTA Storefront demo
+
+OBSERVABILITY
+• Prometheus — scrapes business + HTTP metrics every 15s
+• Grafana — auto-provisioned dashboards (arm distribution, revenue, confidence)
+• Custom counters: decisions by tenant/cluster/arm, guardrail exclusions, approval actions
+
+DEPLOYMENT
+• Podman / Docker Compose — 4 services (bootstrap, api, prometheus, grafana)
+• Named volumes for data persistence (SQLite DB + model artifacts)
+• Healthchecks + dependency ordering (bootstrap completes → API starts → monitoring attaches)
+
+CONFIGURATION & SAFETY
+• Config-driven guardrails (price bounds, competitive positioning, change frequency)
+• Scoring modes: Bandit (normal) / Baseline (kill-switch) / Shadow (safe A/B test)
+• Model versioning with automated rollback on quality gate failure
+
+
+================================================================================
+BONUS: ONE-LINER SYSTEM SUMMARY (for title slide or intro)
+================================================================================
+
+"An AI system that learns optimal hotel prices by experimenting with
+ 9 price tiers, observing real booking outcomes, and getting smarter
+ every night — while keeping revenue managers in control."
+
+
+================================================================================
+BONUS: KEY METRICS / RESULTS TO HIGHLIGHT
+================================================================================
+
+• 9 price arms, 20+ contextual features, 2-tier model architecture
+• Sub-second scoring latency (VW inference is ~0.5ms)
+• Cold-start to self-reliant in ~20 real booking observations
+• Automated quality gate: model can NEVER regress below baseline
+• Zero-code onboarding: new property live in <5 minutes via config
+• Tenant isolation: competing chains NEVER share model weights or training data

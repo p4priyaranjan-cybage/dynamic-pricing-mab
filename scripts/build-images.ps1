@@ -22,19 +22,19 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
 Write-Host "[1/4] Building pricing-bootstrap (trainer)..." -ForegroundColor Yellow
-podman build -f Dockerfile.trainer -t localhost/pricing-bootstrap .
+podman build --net=host -f Dockerfile.trainer -t localhost/pricing-bootstrap .
 if ($LASTEXITCODE -ne 0) { throw "Failed to build pricing-bootstrap" }
 
 Write-Host "[2/4] Building pricing-api..." -ForegroundColor Yellow
-podman build -f Dockerfile.api -t localhost/pricing-api .
+podman build --net=host -f Dockerfile.api -t localhost/pricing-api .
 if ($LASTEXITCODE -ne 0) { throw "Failed to build pricing-api" }
 
 Write-Host "[3/4] Building pricing-prometheus..." -ForegroundColor Yellow
-podman build -f Dockerfile.prometheus -t localhost/pricing-prometheus .
+podman build --net=host -f Dockerfile.prometheus -t localhost/pricing-prometheus .
 if ($LASTEXITCODE -ne 0) { throw "Failed to build pricing-prometheus" }
 
 Write-Host "[4/4] Building pricing-grafana..." -ForegroundColor Yellow
-podman build -f Dockerfile.grafana -t localhost/pricing-grafana .
+podman build --net=host -f Dockerfile.grafana -t localhost/pricing-grafana .
 if ($LASTEXITCODE -ne 0) { throw "Failed to build pricing-grafana" }
 
 Write-Host ""

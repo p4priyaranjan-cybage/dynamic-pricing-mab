@@ -62,3 +62,13 @@ Services will be available at:
   API + Dashboard: http://localhost:8000 (dashboard at /dashboard)
   Prometheus:      http://localhost:9090
   Grafana:         http://localhost:3000 (admin/admin)
+
+
+podman build --no-cache -f Dockerfile.api -t localhost/pricing-api .
+podman-compose down
+podman-compose up
+
+
+podman machine ssh
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+exit

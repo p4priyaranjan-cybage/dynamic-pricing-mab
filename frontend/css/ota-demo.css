@@ -1,0 +1,274 @@
+/* StayBook OTA Demo - Guest-facing hotel booking page */
+
+:root {
+    --ota-primary: #1a56db;
+    --ota-accent: #f59e0b;
+    --ota-dark: #111827;
+    --ota-surface: #ffffff;
+    --ota-bg: #f3f4f6;
+    --ota-success: #059669;
+    --ota-muted: #6b7280;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    background: var(--ota-bg);
+    color: var(--ota-dark);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Navbar */
+.ota-navbar {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1a56db 100%);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    padding: 0.6rem 0;
+}
+
+/* Hero / Search */
+.ota-hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #7c3aed 100%);
+    padding-bottom: 2rem;
+    border-bottom: 3px solid var(--ota-accent);
+}
+
+.ota-hero .form-select,
+.ota-hero .form-control {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Hotel Info Card */
+.ota-hotel-card {
+    background: var(--ota-surface);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.ota-hotel-header {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.ota-hotel-stars {
+    color: var(--ota-accent);
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+}
+
+.ota-hotel-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.ota-hotel-meta span {
+    font-size: 0.85rem;
+    color: var(--ota-muted);
+}
+
+/* Room Cards */
+.ota-room-section {
+    background: var(--ota-surface);
+    border-radius: 16px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.04);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.ota-room-header {
+    background: #f9fafb;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: between;
+    align-items: center;
+}
+
+.ota-room-header h5 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.ota-room-body {
+    padding: 1.5rem;
+}
+
+/* Price Cards Grid */
+.ota-price-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+.ota-date-card {
+    background: var(--ota-surface);
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem 0.75rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.ota-date-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    border-color: var(--ota-primary);
+}
+
+.ota-date-card.updated {
+    border-color: var(--ota-success);
+    animation: otaPulse 1.5s ease;
+}
+
+@keyframes otaPulse {
+    0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.5); }
+    50% { box-shadow: 0 0 20px 4px rgba(5, 150, 105, 0.2); }
+    100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
+}
+
+.ota-date-card .day-name {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--ota-muted);
+    font-weight: 600;
+}
+
+.ota-date-card .date-str {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ota-dark);
+    margin: 0.2rem 0;
+}
+
+.ota-date-card .price-was {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    text-decoration: line-through;
+}
+
+.ota-date-card .price-now {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--ota-dark);
+    line-height: 1.2;
+}
+
+.ota-date-card .price-now.discount {
+    color: var(--ota-success);
+}
+
+.ota-date-card .price-now.premium {
+    color: #dc2626;
+}
+
+.ota-date-card .rate-plan {
+    font-size: 0.65rem;
+    color: var(--ota-muted);
+    margin-top: 0.3rem;
+    text-transform: capitalize;
+}
+
+.ota-date-card .update-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: var(--ota-success);
+    color: white;
+    font-size: 0.55rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+.ota-date-card .weekend-tag {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    background: #dbeafe;
+    color: var(--ota-primary);
+    font-size: 0.55rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+/* Room type icons */
+.ota-room-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+
+.ota-room-icon.standard { background: #e0f2fe; color: #0284c7; }
+.ota-room-icon.deluxe { background: #fef3c7; color: #d97706; }
+.ota-room-icon.suite { background: #ede9fe; color: #7c3aed; }
+
+/* Starting price highlight */
+.ota-starting-price {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #a7f3d0;
+}
+
+/* Select room button */
+.ota-book-btn {
+    background: linear-gradient(135deg, var(--ota-primary), #7c3aed);
+    border: none;
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.ota-book-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(26, 86, 219, 0.3);
+}
+
+/* Footer */
+.ota-footer {
+    margin-top: auto;
+    background: var(--ota-surface);
+    border-top: 1px solid #e5e7eb;
+    padding: 1rem 0;
+}
+
+/* Loading spinner */
+.ota-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .ota-price-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+    .ota-date-card .price-now {
+        font-size: 1.2rem;
+    }
+    .ota-hero h1 { font-size: 1.5rem; }
+}
